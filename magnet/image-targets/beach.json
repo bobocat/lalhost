@@ -1,0 +1,23 @@
+{
+  "imagePath": "image-targets/beach_luminance.png",
+  "metadata": null,
+  "name": "beach",
+  "type": "PLANAR",
+  "properties": {
+    "left": 35,
+    "top": 0,
+    "width": 1052,
+    "height": 1402,
+    "isRotated": false,
+    "originalWidth": 1122,
+    "originalHeight": 1402
+  },
+  "resources": {
+    "originalImage": "beach_original.png",
+    "croppedImage": "beach_cropped.png",
+    "thumbnailImage": "beach_thumbnail.png",
+    "luminanceImage": "beach_luminance.png"
+  },
+  "created": 1787876551159,
+  "updated": 1787876551159
+}

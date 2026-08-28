@@ -1,0 +1,21 @@
+{
+	"image" : {
+		"name" : "beach",
+		"displayImage" : "sourceimages/beach2.png",
+		"displayOpacity" : 0.5,
+		"findText" : "Find the beach image"
+	},
+	"model" : {
+		"rotation" : {
+			"x" : 90,
+			"y" : 0,
+			"z" : 0
+		},
+		"scale" : 1,
+		"position" : {
+			"x" : 0,
+			"y" : 0,
+			"z" : 0
+		}
+	}
+}

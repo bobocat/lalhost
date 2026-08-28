@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Beach AR</title>
+
+  <link rel="stylesheet" href="style.css">
+
+  <!-- A-Frame (8th Wall fork) + 8th Wall open-source engine (no app key needed) -->
+  <script crossorigin="anonymous" src="./external/scripts/8frame-1.5.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script>
+  <!-- slam chunk provides XR8.XrController (image-target detection lives there) -->
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" crossorigin="anonymous" async="true" data-preload-chunks="slam"></script>
+
+  <!-- ?simulate=1 -> desktop preview without a camera -->
+  <script>
+    window.__SIMULATE_AR__ = new URLSearchParams(location.search).get('simulate') === '1'
+  </script>
+
+  <!-- Module: registers the image-target-tracker component before the scene initializes -->
+  <script type="module" src="app.js"></script>
+</head>
+
+<body>
+
+<!-- "Find the image" prompt; hidden while the marker is tracked -->
+<div id="find-image-screen" class="overlay fullscreen">
+  <div class="overlay-content">
+    <p id="find-image-text">Find the beach image</p>
+    <img id="find-image-preview" class="find-image-preview" src="sourceimages/beach2.png" alt="" />
+  </div>
+</div>
+
+<!-- Simulate mode only -->
+<button id="fake-place-btn" class="fake-place-btn hidden" type="button">Fake place</button>
+
+<a-scene
+  landing-page
+  xrextras-loading
+  xrextras-runtime-error
+  renderer="colorManagement: true"
+  xrweb="allowedDevices: any; disableWorldTracking: true">
+
+  <a-assets>
+    <a-asset-item id="beach-model" src="models/biarriz.glb"></a-asset-item>
+  </a-assets>
+
+  <!-- Tracked marker container: posed by image-target-tracker from raw 8th Wall events -->
+  <a-entity id="image-target" image-target-tracker="name: beach" visible="false">
+    <a-entity id="beach" gltf-model="#beach-model" position="0 0 0" rotation="0 0 0" scale="1 1 1"></a-entity>
+  </a-entity>
+
+  <a-camera id="camera" position="0 0 0"></a-camera>
+
+  <a-light type="ambient" intensity="0.8"></a-light>
+  <a-entity light="type: directional; intensity: 0.8; castShadow: false" position="1 4 2"></a-entity>
+
+</a-scene>
+
+<!-- Simulate mode: strip 8th Wall components before A-Frame initializes so no camera is requested -->
+<script>
+  (function () {
+    if (!window.__SIMULATE_AR__) return
+    var scene = document.querySelector('a-scene')
+    if (!scene) return
+    ;['xrweb', 'landing-page', 'xrextras-loading', 'xrextras-runtime-error'].forEach(function (a) {
+      scene.removeAttribute(a)
+    })
+    scene.setAttribute('background', 'color: #000000')
+  })()
+</script>
+
+</body>
+
+</html>
