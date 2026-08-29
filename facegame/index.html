@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Face Pilot</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🚀%3C/text%3E%3C/svg%3E">
+<!-- privacy: all face processing happens in this browser tab. The only network
+     requests are the MediaPipe script, WASM and model downloads from CDN.
+     No video frames are stored or uploaded. -->
+<style>
+  :root { --bg:#070b1a; --panel:#111a33; --ink:#e8ecff; --dim:#8b95c0; --accent:#63d2ff; --warn:#ffb347; --good:#7dffb3; --bad:#ff6b8b; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:15px/1.4 system-ui,Segoe UI,Roboto,sans-serif; overflow:hidden; }
+  #stage { position:relative; width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; }
+  #game { background:#03050f; box-shadow:0 0 40px #000; }
+  #video { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+  #preview { position:absolute; right:12px; bottom:12px; width:160px; height:120px; border:1px solid #2a3560; border-radius:8px; background:#000; transform:scaleX(-1); }
+  #preview.hidden { display:none; }
+  #preview { z-index:20; } /* above the screen overlays, so calibration shows a clear feed */
+  #preview.big { width:min(400px,60vw); height:auto; aspect-ratio:4/3; right:50%; bottom:auto; top:max(12px, calc(50vh - 330px)); transform:translateX(50%) scaleX(-1); border-width:2px; box-shadow:0 0 30px #000; }
+  .screen.cal-layout { align-items:flex-start; padding-top:max(330px, calc(50vh - 10px)); }
+  #hud { position:absolute; left:12px; top:12px; display:flex; flex-direction:column; gap:6px; pointer-events:none; }
+  #hud.hidden { display:none; }
+  .meter { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--dim); width:275px; }
+  .meter .lbl { width:157px; text-align:right; white-space:nowrap; }
+  .meter .lbl b { color:var(--ink); font-weight:500; }
+  .meter.active .lbl b { color:var(--good); }
+  .meter .bar { flex:1; height:10px; background:#1a2447; border-radius:5px; position:relative; overflow:hidden; }
+  .meter .fill { height:100%; width:0%; background:var(--accent); transition:width 60ms linear; }
+  .meter .thr { position:absolute; top:0; bottom:0; width:2px; background:#fff8; }
+  .meter.active .fill { background:var(--good); }
+  .meter.disabled { opacity:.35; }
+  #score { position:absolute; right:12px; top:12px; text-align:right; font-weight:600; font-size:18px; pointer-events:none; }
+  #score.hidden { display:none; }
+  #score small { display:block; font-weight:400; color:var(--dim); font-size:12px; }
+  .screen { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#070b1acc; backdrop-filter:blur(3px); }
+  .screen.hidden { display:none; }
+  .card { background:var(--panel); border:1px solid #2a3560; border-radius:14px; padding:26px 30px; width:min(560px,92vw); max-height:92vh; overflow:auto; }
+  h1 { margin:0 0 6px; font-size:30px; letter-spacing:.5px; } h2 { margin:0 0 12px; font-size:22px; }
+  p { margin:6px 0; color:var(--dim); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin:10px 0; }
+  button { background:#1b2750; color:var(--ink); border:1px solid #3a4a80; border-radius:9px; padding:10px 16px; font-size:15px; cursor:pointer; }
+  button:hover { background:#25357a; } button.primary { background:var(--accent); color:#04122a; border-color:var(--accent); font-weight:600; }
+  button.small { padding:5px 10px; font-size:13px; }
+  label.opt { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid #1d2748; }
+  label.opt span { color:var(--dim); } input[type=range] { width:140px; }
+  select { background:#1b2750; color:var(--ink); border:1px solid #3a4a80; border-radius:6px; padding:4px; }
+  table { width:100%; border-collapse:collapse; } td,th { padding:6px 8px; text-align:left; border-bottom:1px solid #1d2748; } th { color:var(--dim); font-weight:500; }
+  .tabs button.on { background:var(--accent); color:#04122a; }
+  .big { font-size:52px; font-weight:700; text-align:center; letter-spacing:6px; margin:12px 0; }
+  .big span.cur { color:var(--accent); text-decoration:underline; }
+  .picker { display:flex; justify-content:center; gap:18px; margin:8px 0 4px; }
+  .picker .col { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .picker .col .ch { font-size:44px; font-weight:700; width:56px; text-align:center; line-height:1; padding:6px 0; border-radius:8px; cursor:pointer; }
+  .picker .col.cur .ch { color:var(--accent); background:#0b1230; }
+  .picker button { width:56px; padding:6px 0; font-size:16px; }
+  .progress { height:8px; background:#1a2447; border-radius:4px; overflow:hidden; margin:10px 0; } .progress div { height:100%; background:var(--accent); width:0; }
+  .status { font-size:13px; color:var(--dim); }
+  .status.ok { color:var(--good); } .status.bad { color:var(--bad); } .status.warn { color:var(--warn); }
+  .breath { width:60px; height:60px; margin:18px auto; border-radius:50%; background:var(--accent); animation:breath 8s ease-in-out infinite; }
+  @keyframes breath { 0%,100%{transform:scale(.6);opacity:.5} 50%{transform:scale(1.3);opacity:1} }
+  #debug { position:absolute; left:12px; bottom:12px; background:#000a; color:#9fb; font:11px/1.3 ui-monospace,monospace; padding:8px; border-radius:6px; max-height:60vh; overflow:auto; width:260px; column-count:2; }
+  #debug.hidden { display:none; }
+  #debug { z-index:30; } /* readable above the dimmed/blurred overlays */
+  #debug .hdr { column-span:all; color:#fff; margin-bottom:4px; }
+  .gesture-list li { margin:4px 0; }
+  kbd { background:#0b1230; border:1px solid #3a4a80; border-radius:4px; padding:1px 5px; font-size:12px; }
+  .reduce-motion * { animation:none !important; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game" width="600" height="900"></canvas>
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="preview" width="400" height="300" class="hidden"></canvas>
+
+  <div id="hud" class="hidden"></div>
+  <div id="score" class="hidden"><span id="scoreVal">0</span><small id="scoreSub">Level 1 · ×1.0</small></div>
+  <div id="debug" class="hidden"></div>
+
+  <!-- ===== Title ===== -->
+  <div id="s-title" class="screen">
+    <div class="card">
+      <h1>🚀 Face Pilot</h1>
+      <p>Fly through the asteroid field using only your face. Six facial exercises, one small ship.</p>
+      <p id="camStatus" class="status">Starting camera…</p>
+      <div class="row">
+        <button class="primary" data-act="play-normal">Play</button>
+        <button data-act="play-gentle">Play · Gentle mode</button>
+      </div>
+      <div class="row">
+        <button data-act="tutorial">Tutorial</button>
+        <button data-act="calibrate">Calibrate</button>
+        <button data-act="leaderboard">Leaderboard</button>
+        <button data-act="settings">Settings</button>
+        <button data-act="howto">How to play</button>
+      </div>
+      <p style="font-size:12px">Privacy: your camera feed never leaves this tab. Only the face-tracking model is downloaded.</p>
+    </div>
+  </div>
+
+  <!-- ===== How to ===== -->
+  <div id="s-howto" class="screen hidden">
+    <div class="card">
+      <h2>How to play</h2>
+      <p>Collect ⭐ stars and avoid the rocks. Your face is the controller — the meters on the left show what the camera sees.</p>
+      <ul class="gesture-list" id="howtoList"></ul>
+      <p>Keyboard twins: <kbd>←</kbd><kbd>→</kbd> steer · <kbd>Z</kbd> boost · <kbd>X</kbd> cannons · <kbd>C</kbd> shield · <kbd>V</kbd> magnet · <kbd>Space</kbd> pause/confirm · <kbd>D</kbd> debug panel</p>
+      <p>Level 1 walks you through each gesture. Gentle mode is slower, has no game over, and reminds you to rest.</p>
+      <div class="row"><button class="primary hidden" id="howtoStart" data-act="howto-start">Start flying</button><button data-act="title">Back</button></div>
+    </div>
+  </div>
+
+  <!-- ===== Calibration ===== -->
+  <div id="s-cal" class="screen cal-layout hidden">
+    <div class="card">
+      <h2 id="calTitle">Calibration</h2>
+      <p id="calText"></p>
+      <div class="progress"><div id="calBar"></div></div>
+      <p id="calStatus" class="status"></p>
+      <div id="calMeter" class="meter" style="width:100%"><span class="lbl">level</span><div class="bar"><div class="fill"></div></div></div>
+      <div class="row" id="calButtons"></div>
+    </div>
+  </div>
+
+  <!-- ===== Pause ===== -->
+  <div id="s-pause" class="screen hidden">
+    <div class="card">
+      <h2 id="pauseTitle">Paused</h2>
+      <p id="pauseText">Open your mouth wide or press Space to resume.</p>
+      <ul class="gesture-list" id="pauseLegend" style="font-size:13px"></ul>
+      <div class="row">
+        <button class="primary" data-act="resume">Resume</button>
+        <button id="skipTutorial" class="hidden" data-act="skip-tutorial">Skip tutorial</button>
+        <button data-act="calibrate">Recalibrate</button>
+        <button data-act="quit">Quit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Rest ===== -->
+  <div id="s-rest" class="screen hidden">
+    <div class="card" style="text-align:center">
+      <h2>Rest your face</h2>
+      <p>Let everything relax. Breathe with the dot.</p>
+      <div class="breath"></div>
+      <p id="restCount" class="status">15</p>
+    </div>
+  </div>
+
+  <!-- ===== Game over ===== -->
+  <div id="s-over" class="screen hidden">
+    <div class="card">
+      <h2 id="overTitle">Run complete</h2>
+      <table id="overTable"></table>
+      <div id="nameEntry" class="hidden">
+        <p>New top-10 score! Pick your initials with the buttons (or arrow keys / Enter).</p>
+        <div class="big" id="nameBig"></div>
+        <div class="row" style="justify-content:center"><button class="primary" data-act="name-save">Save score</button></div>
+      </div>
+      <div class="row">
+        <button class="primary" data-act="replay">Play again</button>
+        <button data-act="leaderboard">Leaderboard</button>
+        <button data-act="title">Title</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Leaderboard ===== -->
+  <div id="s-board" class="screen hidden">
+    <div class="card">
+      <h2>Leaderboard</h2>
+      <div class="row tabs"><button id="tabNormal" class="on" data-act="board-normal">Normal</button><button id="tabGentle" data-act="board-gentle">Gentle</button></div>
+      <table id="boardTable"></table>
+      <div class="row"><button class="primary" data-act="title">Back</button></div>
+    </div>
+  </div>
+
+  <!-- ===== Settings ===== -->
+  <div id="s-settings" class="screen hidden">
+    <div class="card">
+      <h2>Settings</h2>
+      <div id="settingsBody"></div>
+      <div class="row">
+        <button class="primary" data-act="title">Done</button>
+        <button data-act="reset-boards">Reset leaderboards</button>
+        <button data-act="reset-all">Reset all data</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Error ===== -->
+  <div id="s-error" class="screen hidden">
+    <div class="card">
+      <h2>Face tracking unavailable</h2>
+      <p id="errText"></p>
+      <div class="row">
+        <button class="primary" data-act="retry">Retry</button>
+        <button data-act="keyboard-mode">Play with keyboard</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+/* =====================================================================
+   0. CONSTANTS
+   ===================================================================== */
+const MP_VERSION = '0.10.14';
+const MP_CDN = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}`;
+const MP_WASM = `${MP_CDN}/wasm`;
+const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const W = 600, H = 900;
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const now = () => performance.now();
+
+// Gesture definitions (§3 of DESIGN.md). raw(bs, s) returns the raw blendshape score.
+const GESTURES = [
+  { id:'smile',  label:'smile',  type:'hold',      on:.45, off:.30, minHold:100, cooldown:0,    bilateral:['mouthSmileLeft','mouthSmileRight'], key:'KeyZ' },
+  { id:'brow',   label:'brow',   type:'momentary', on:.50, off:.30, minHold:80,  cooldown:450,  bilateral:['browOuterUpLeft','browOuterUpRight'], primary:'browInnerUp', key:'KeyX' },
+  { id:'eyes',   label:'eyes',   type:'longhold',  on:.70, off:.50, minHold:600, cooldown:1500, bilateral:['eyeBlinkLeft','eyeBlinkRight'], combine:'min', key:'Space' },
+  { id:'pucker', label:'pucker', type:'analog',    on:.35, off:.20, minHold:0,   cooldown:0,    single:'mouthPucker', key:null },
+  { id:'cheek',  label:'cheek',  type:'momentary', on:.45, off:.25, minHold:150, cooldown:3000, single:'cheekPuff', geo:true, key:'KeyC' },
+  { id:'mouth',  label:'mouth',  type:'momentary', on:.55, off:.35, minHold:250, cooldown:2000, single:'jawOpen', key:'KeyV' },
+];
+const ACTIONS = ['boost','shield','magnet','steer','blast','pause'];
+const ACTION_COOLDOWN = { blast:450, shield:3000, magnet:2000, pause:1000 }; // cooldown belongs to the action, so remapping keeps the feel
+const GESTURE_INFO = {
+  smile:  { emoji:'😊', name:'Smile',        how:'Smile and hold it' },
+  brow:   { emoji:'😮', name:'Eyebrows up',  how:'Raise your eyebrows' },
+  eyes:   { emoji:'😌', name:'Eyes closed',  how:'Gently close both eyes for a moment' },
+  pucker: { emoji:'😗', name:'Pucker',       how:'Pucker your lips and turn your head' },
+  cheek:  { emoji:'😤', name:'Cheek puff',   how:'Puff out your cheeks' },
+  mouth:  { emoji:'😲', name:'Mouth open',   how:'Open your mouth wide' },
+};
+const ACTION_INFO = {
+  boost:  { name:'Boost',  desc:'speed up and grow your score multiplier' },
+  shield: { name:'Shield', desc:'a bubble that protects you for 1.5 s' },
+  magnet: { name:'Magnet', desc:'pull nearby stars to you for 2 s' },
+  steer:  { name:'Steer',  desc:'move the ship left and right' },
+  blast:  { name:'Cannons', desc:'fire both cannons straight ahead' },
+  pause:  { name:'Pause',  desc:'pause or resume the game' },
+};
+const gestureFor = action => Object.keys(DEFAULT_MAP).find(g => settings.map[g] === action);
+const hintFor = action => { const g = gestureFor(action); return g ? `${GESTURE_INFO[g].emoji} ${GESTURE_INFO[g].how} to ${ACTION_INFO[action].name.toLowerCase()}` : ''; };
+const DEFAULT_MAP = { smile:'boost', brow:'blast', eyes:'pause', pucker:'steer', cheek:'shield', mouth:'magnet' };
+
+const LEVELS = [
+  // Each level has its own look (hue), name and hazard mix so they feel distinct.
+  { name:'Open Lane',     hue:200, dur:35, speed:.9,  rocks:7,  stars:0,  feat:'steer', gemChance:0, steerOnly:true }, // just weave: rocks only
+  { name:'Asteroid Belt', hue:220, dur:40, speed:1.0, rocks:4,  stars:8,  feat:'boost' },
+  { name:'Gem Field',     hue:320, dur:40, speed:1.0, rocks:8,  stars:4,  feat:'magnet', gemChance:.8 }, // mostly gem rocks
+  { name:'Solar Wind',    hue:35,  dur:40, speed:1.1, rocks:5,  stars:10, feat:'boost', drift:true },
+  { name:'Debris Field',  hue:280, dur:45, speed:1.2, rocks:8,  stars:8,  feat:'blast', walls:true, small:true },
+  { name:'Meteor Shower', hue:5,   dur:45, speed:1.3, rocks:9,  stars:8,  feat:'shield', fast:true },
+  { name:'Star Stream',   hue:160, dur:50, speed:1.4, rocks:6,  stars:14, feat:'magnet', streams:true },
+  { name:'The Cluster',   hue:300, dur:50, speed:1.5, rocks:10, stars:12, feat:null, walls:true, clusters:true },
+  { name:'Comet Alley',   hue:190, dur:60, speed:1.7, rocks:12, stars:12, feat:null, walls:true, comets:true },
+];
+function levelDef(n) { // 1-based
+  if (n <= LEVELS.length) return LEVELS[n-1];
+  const k = n - LEVELS.length;
+  return { name:`Deep Space ${k}`, hue:(k*47)%360, dur:60, speed:1.7 + .15*k, rocks:12+k, stars:12+k, feat:null, walls:true, comets:true, clusters:true, fast:k>2 };
+}
+const GENTLE = { thr:.75, speed:.6, density:.5, hitbox:.7, hold:.75, cooldown:1.5, restEvery:90, restFor:15, maxLevel:8 };
+
+/* =====================================================================
+   1. PERSISTENCE
+   ===================================================================== */
+const Store = {
+  get(k, d) { try { const v = localStorage.getItem('facepilot.'+k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('facepilot.'+k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem('facepilot.'+k); } catch {} },
+};
+const defaultSettings = () => ({
+  sens: Object.fromEntries(GESTURES.map(g=>[g.id,1])),
+  enabled: Object.fromEntries(GESTURES.map(g=>[g.id,true])),
+  map: { ...DEFAULT_MAP },
+  asym: 'max', eyeMode:'both', steerMode:'pucker', invertSteer:false,
+  preview:true, sound:true, reduceMotion:false, keyboardOnly:false,
+});
+let settings = { ...defaultSettings(), ...Store.get('settings.v2', {}) };
+let calibration = Store.get('calibration.v1', null); // {neutral:{}, max:{}, date}
+
+/* =====================================================================
+   2. AUDIO (procedural)
+   ===================================================================== */
+const Audio = (() => {
+  let ctx = null;
+  const ensure = () => { if (!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)(); if (ctx.state==='suspended') ctx.resume(); return ctx; };
+  function tone(freq, dur, type='sine', gain=.12, slide=0) {
+    if (!settings.sound) return;
+    try {
+      const c = ensure(), o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, c.currentTime);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20,freq+slide), c.currentTime+dur);
+      g.gain.setValueAtTime(gain, c.currentTime); g.gain.exponentialRampToValueAtTime(.0001, c.currentTime+dur);
+      o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime+dur);
+    } catch {}
+  }
+  return {
+    unlock: ensure,
+    star: () => tone(880, .12, 'triangle', .08, 400),
+    blast: () => tone(120, .25, 'sawtooth', .15, -80),
+    shield: () => { tone(520,.15,'sine',.1); setTimeout(()=>tone(780,.2,'sine',.1),80); },
+    magnet: () => tone(1200,.3,'sine',.06,600),
+    hit: () => tone(90,.4,'square',.15,-60),
+    pause: () => tone(440,.1,'square',.06),
+    level: () => { [523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.2,'triangle',.1),i*110)); },
+    success: () => { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.28,'triangle',.12),i*120)); setTimeout(()=>tone(1319,.5,'sine',.08),520); },
+    shot: () => tone(900,.08,'square',.05,-500),
+    explode: (big) => { tone(big?70:110, big?.6:.35, 'sawtooth', .18, -60); tone(big?220:320, .15, 'square', .08, -200); },
+    ebullet: () => { tone(1400,.12,'sawtooth',.05,-900); tone(700,.1,'square',.03,-400); },
+    hit2: () => tone(500,.09,'square',.07,300),
+    boostTick: () => tone(300,.05,'sine',.03),
+  };
+})();
+
+/* =====================================================================
+   3. CAMERA + FACE LANDMARKER
+   ===================================================================== */
+const video = $('video');
+const Face = {
+  ready:false, running:false, landmarker:null, faceFound:false, lastSeen:0,
+  bs:{}, yaw:0, inferMs:0, fps:0, _frames:0, _fpsT:0, _lastVideoT:-1, error:null,
+  async start() {
+    this.error = null;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video:{ width:640, height:480, facingMode:'user' }, audio:false });
+      video.srcObject = stream; await video.play();
+    } catch (e) { throw new Error('Camera access was denied or no camera was found. ('+(e.message||e)+')'); }
+    let mod;
+    try {
+      const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timed out loading the face-tracking library')),15000));
+      mod = await Promise.race([import(MP_CDN), timeout]);
+      const vision = await mod.FilesetResolver.forVisionTasks(MP_WASM);
+      const make = delegate => mod.FaceLandmarker.createFromOptions(vision, {
+        baseOptions:{ modelAssetPath:MP_MODEL, delegate }, runningMode:'VIDEO', numFaces:1,
+        outputFaceBlendshapes:true, outputFacialTransformationMatrixes:true });
+      try { this.landmarker = await Promise.race([make('GPU'), timeout]); }
+      catch (e) { console.warn('GPU delegate failed, falling back to CPU', e); this.landmarker = await make('CPU'); }
+    } catch (e) { throw new Error("Couldn't load face tracking — check your connection. ("+(e.message||e)+')'); }
+    this.ready = true; this.running = true; this._loop();
+  },
+  _loop() {
+    if (!this.running) return;
+    requestAnimationFrame(()=>this._loop());
+    if (document.hidden || video.readyState < 2) return;
+    if (video.currentTime === this._lastVideoT) return;
+    this._lastVideoT = video.currentTime;
+    const t0 = now();
+    let res;
+    try { res = this.landmarker.detectForVideo(video, t0); } catch (e) { console.warn(e); return; }
+    this.inferMs = this.inferMs*.9 + (now()-t0)*.1;
+    this._frames++; if (t0 - this._fpsT > 1000) { this.fps = this._frames; this._frames = 0; this._fpsT = t0; }
+    if (res.faceBlendshapes && res.faceBlendshapes.length) {
+      this.faceFound = true; this.lastSeen = t0;
+      const bs = {}; for (const c of res.faceBlendshapes[0].categories) bs[c.categoryName] = c.score;
+      this.bs = bs;
+      const lm = res.faceLandmarks[0];
+      // yaw proxy from landmark geometry: nose tip (1) vs cheek edges (234 left, 454 right). Negative = user turned to their right.
+      const l = lm[234], r = lm[454], n = lm[1];
+      this.yaw = ((n.x - (l.x+r.x)/2) / Math.max(1e-3, (r.x-l.x))) * 2; // ≈ -1..1
+      this.landmarks = lm;
+    } else if (t0 - this.lastSeen > 400) { this.faceFound = false; this.landmarks = null; }
+    drawPreview();
+  },
+};
+const preview = $('preview'), pctx = preview.getContext('2d');
+function drawPreview() {
+  if (preview.classList.contains('hidden')) return;
+  const PW = preview.width, PH = preview.height;
+  pctx.drawImage(video, 0, 0, PW, PH);
+  if (Face.landmarks && (debugOn || Cal.active)) { pctx.fillStyle = '#7dffb3'; for (let i=0;i<Face.landmarks.length;i+=2) { const p=Face.landmarks[i]; pctx.fillRect(p.x*PW, p.y*PH, 2, 2); } }
+  pctx.strokeStyle = Face.faceFound ? '#7dffb3' : '#ff6b8b'; pctx.lineWidth = 6; pctx.strokeRect(2,2,PW-4,PH-4);
+}
+
+/* =====================================================================
+   4. GESTURE DETECTOR (pure: blendshapes + calibration + settings + time → states)
+   ===================================================================== */
+// Cheek-puff blendshape is weak on many faces; add a geometric term (cheek width vs. face width) that
+// calibration removes the offset of via the neutral sample.
+function cheekGeo() {
+  const lm = Face.landmarks; if (!lm) return 0;
+  // reference: outer eye corners (don't move when puffing); signal: cheek contour width (bulges outward)
+  const ref = Math.hypot(lm[263].x - lm[33].x, lm[263].y - lm[33].y) || 1e-3;
+  const w1 = Math.hypot(lm[323].x - lm[93].x, lm[323].y - lm[93].y), w2 = Math.hypot(lm[361].x - lm[132].x, lm[361].y - lm[132].y);
+  return ((w1 + w2) / 2 / ref) * 4; // ~4% widening ≈ +0.25
+}
+// ---- learned cheek-puff model: calibration compares ALL face stats (52 blendshapes + 8 geometry ratios)
+// between the neutral pose and the puffed pose and builds a Fisher-style weighted projection.
+let _featKeys = null;
+function featKeys(bs) { if (!_featKeys && bs && Object.keys(bs).length) _featKeys = Object.keys(bs).sort(); return _featKeys || []; }
+function featVec(bs = Face.bs) {
+  const v = featKeys(bs).map(k => bs[k] || 0), lm = Face.landmarks;
+  if (lm) { const ref = Math.hypot(lm[263].x-lm[33].x, lm[263].y-lm[33].y) || 1e-3, D = (a,b) => Math.hypot(lm[a].x-lm[b].x, lm[a].y-lm[b].y)/ref;
+    v.push(D(93,323), D(132,361), D(61,291), D(13,14), D(48,278), D(50,280), D(205,425), D(10,152)); }
+  else v.push(0,0,0,0,0,0,0,0);
+  return v;
+}
+function featStats(rows) {
+  const m = rows[0].map((_,i)=>rows.reduce((s,r)=>s+r[i],0)/rows.length);
+  const sd = m.map((mi,i)=>Math.sqrt(rows.reduce((s,r)=>s+(r[i]-mi)**2,0)/rows.length));
+  return { m, sd };
+}
+function buildModel(neutralRows, poseRows) {
+  const { m: m0, sd: sd0 } = featStats(neutralRows), { m: m1 } = featStats(poseRows);
+  const diff = m1.map((v,i)=>v-m0[i]);
+  const w = diff.map((d,i)=> d/(sd0[i]+.02)); // separation over noise: features that barely move at rest but shift when puffed dominate
+  const scale = diff.reduce((s,d,i)=>s+w[i]*d, 0) || 1;
+  return { m0, w, scale, n: m0.length };
+}
+function modelScore(model, x) { if (!model || x.length !== model.n) return 0; let s = 0; for (let i=0;i<model.n;i++) s += model.w[i]*(x[i]-model.m0[i]); return s/model.scale; } // 0 = neutral, 1 = calibrated puff
+function zLift(stats, x) { // direction-agnostic "how far from neutral" in noise units, for the calibration hold detector
+  if (!stats || x.length !== stats.m.length) return 0; let s = 0; for (let i=0;i<x.length;i++) { const z = (x[i]-stats.m[i])/(stats.sd[i]+.02); s += z*z; }
+  return Math.max(0, Math.sqrt(s/x.length) - 1.5) / 4;
+}
+function rawScore(g, bs) {
+  if (g.geo) { const model = calibration?.cheekModel || Cal.cheekModel; if (model) return modelScore(model, featVec(bs)); }
+  if (g.single) return (bs[g.single] || 0) + (g.geo ? cheekGeo() : 0);
+  const [L, R] = g.bilateral.map(k => bs[k] || 0);
+  if (g.id === 'eyes') { const m = settings.eyeMode; if (m==='left') return L; if (m==='right') return R; return Math.min(L,R); }
+  let v; const a = settings.asym;
+  v = a==='mean' ? (L+R)/2 : a==='left' ? L : a==='right' ? R : Math.max(L,R);
+  if (g.primary) v = Math.max(v, bs[g.primary] || 0);
+  return v;
+}
+function normScore(g, raw) {
+  if (!calibration) return raw;
+  const n = calibration.neutral[g.id] ?? 0, m = calibration.max[g.id] ?? 1, sign = calibration.sign?.[g.id] ?? 1;
+  return clamp(((raw - n) * sign) / Math.max(.06, (m - n) * sign), 0, 1); // sign learned in calibration: handles signals that go *down* for a gesture
+}
+class GestureDetector {
+  constructor() { this.state = {}; for (const g of GESTURES) this.state[g.id] = { norm:0, raw:0, above:false, since:0, fired:false, cdUntil:0, progress:0 }; this.events = []; }
+  thresholds(g) {
+    const s = settings.sens[g.id] || 1, gm = game.gentle ? GENTLE.thr : 1;
+    const cd = ACTION_COOLDOWN[settings.map[g.id]] ?? g.cooldown;
+    return { on: g.on/s*gm, off: g.off/s*gm, hold: g.minHold*(game.gentle?GENTLE.hold:1), cd: cd*(game.gentle?GENTLE.cooldown:1) };
+  }
+  update(bs, t) {
+    this.events = [];
+    for (const g of GESTURES) {
+      const st = this.state[g.id];
+      if (!settings.enabled[g.id] || !Face.faceFound) { if (st.above) { st.above=false; this.events.push({g:g.id,type:'end'}); } st.norm=0; st.progress=0; continue; }
+      st.raw = rawScore(g, bs); st.norm = normScore(g, st.raw);
+      const th = this.thresholds(g);
+      if (!st.above && st.norm >= th.on && t >= st.cdUntil) { st.above = true; st.since = t; st.fired = false; this.events.push({g:g.id,type:'start'}); }
+      else if (st.above && st.norm < th.off) { st.above = false; st.progress = 0; this.events.push({g:g.id,type:'end'}); }
+      if (st.above) {
+        const held = t - st.since;
+        st.progress = th.hold ? clamp(held/th.hold, 0, 1) : 1;
+        if (!st.fired && held >= th.hold) { st.fired = true; st.cdUntil = t + th.cd; this.events.push({g:g.id,type:'fire'}); }
+      }
+    }
+    return this.events;
+  }
+  active(id) { const st = this.state[id]; return st.above && st.fired; }
+}
+const detector = new GestureDetector();
+
+/* =====================================================================
+   5. INPUT BUS (merges gestures + keyboard)
+   ===================================================================== */
+const keys = new Set(), pressed = new Set(); // pressed: keydowns since last frame (so quick taps are never missed)
+const Input = {
+  steer:0, boost:0, fires:[], // fires: action names fired this frame
+  update(t) {
+    this.fires = [];
+    const evs = Face.ready && !settings.keyboardOnly ? detector.update(Face.bs, t) : [];
+    const prio = { pause:0, shield:1, blast:2, magnet:3 };
+    const fired = new Set();
+    for (const e of evs) if (e.type==='fire') { const a = settings.map[e.g]; if (a && a!=='boost' && a!=='steer') fired.add(a); }
+    // keyboard twins
+    for (const g of GESTURES) if (g.key && pressed.has(g.key)) { const a = settings.map[g.id]; if (a && a!=='boost' && a!=='steer') fired.add(a); }
+    pressed.clear();
+    this.fires = [...fired].sort((a,b)=>(prio[a]??9)-(prio[b]??9));
+    // continuous
+    const boostG = Object.keys(settings.map).find(k=>settings.map[k]==='boost');
+    const boostKey = GESTURES.find(g=>g.id===boostG)?.key;
+    this.boost = (boostG && detector.active(boostG)) ? detector.state[boostG].norm : (boostKey && keys.has(boostKey)) ? 1 : 0;
+    const steerG = Object.keys(settings.map).find(k=>settings.map[k]==='steer');
+    let s = 0;
+    if (keys.has('ArrowLeft')) s = -1; else if (keys.has('ArrowRight')) s = 1;
+    else if (Face.ready && Face.faceFound && !settings.keyboardOnly) {
+      const gate = settings.steerMode==='yaw' || (steerG && detector.state[steerG].above);
+      if (gate) { let y = -Face.yaw; if (Math.abs(y) < .14) y = 0; s = clamp(y*3, -1, 1); }
+    }
+    this.steer = settings.invertSteer ? -s : s;
+  },
+};
+window.addEventListener('keydown', e => {
+  if (e.repeat) return; keys.add(e.code); pressed.add(e.code); Audio.unlock();
+  if (e.code==='KeyD') { debugOn = !debugOn; $('debug').classList.toggle('hidden', !debugOn); }
+  if (e.code==='Space') e.preventDefault();
+  UI.key(e.code);
+});
+window.addEventListener('keyup', e => keys.delete(e.code));
+
+/* =====================================================================
+   6. GAME
+   ===================================================================== */
+const game = {
+  mode:'title', gentle:false, level:1, levelT:0, score:0, mult:1, lives:3, combo:0, runT:0,
+  ship:{ x:W/2, y:H*.78, vx:0, r:18 }, ents:[], fx:[],
+  shieldUntil:0, magnetUntil:0, lastRest:0, hitFlash:0, invuln:0, spawnAcc:{rocks:0,stars:0}, speed:1,
+  counts:{}, formBonus:0, lastBoostTick:0, paused:false, over:false, lastNear:0,
+};
+function newRun(gentle) {
+  Object.assign(game, { mode:'play', gentle, level:1, levelT:0, score:0, mult:1, lives:3, combo:0, runT:0,
+    ents:[], fx:[], shieldUntil:0, magnetUntil:0, lastRest:0, hitFlash:0, invuln:0, spawnAcc:{rocks:0,stars:0},
+    counts:{}, formBonus:0, paused:false, over:false, lastNear:0, lastActionT:0, tutorial:null, nextUfo: now()+20000, shake:0, boostLerp:0 });
+  game.ship = { x:W/2, y:H*.78, vx:0, r:18 };
+  game.tutorialIdx = 0; setHint(`Open Lane — just weave! ${hintFor('steer')}`, 9);
+  Audio.level();
+}
+function setHint(text, secs) { game.hint = text; game.hintUntil = game.runT + secs; }
+
+/* ---------- Interactive tutorial: one step per control, must be performed to advance ---------- */
+const TUTORIAL_STEPS = [
+  { action:'steer',  title:'Steering',   goal:'Fly into the left zone, then the right zone', need:2,
+    setup(){ this.left=false; this.right=false; },
+    check(){ const x=game.ship.x; if (x<130) this.left=true; if (x>W-130) this.right=true; return (this.left?1:0)+(this.right?1:0); } },
+  { action:'boost',  title:'Boost',      goal:'Hold it for 2 seconds', need:2,
+    setup(){ this.held=0; }, check(dt){ if (Input.boost>0) this.held+=dt; return Math.min(2,this.held); }, fmt:v=>`${v.toFixed(1)} / 2 s` },
+  { action:'shield', title:'Shield',     goal:'Raise your shield twice', need:2,
+    setup(){ this.n=game.counts.shield||0; }, check(){ return Math.min(2,(game.counts.shield||0)-this.n); } },
+  { action:'blast',  title:'Cannons',    goal:'Shoot the two rocks ahead — line them up by steering', need:2,
+    setup(){ this.rocks=[]; const cx = clamp(game.ship.x, 80, W-80); for (const x of [cx-40, cx+40]) { spawnRock(x, game.ship.y-260, 26, 0); this.rocks.push(game.ents[game.ents.length-1]); } },
+    check(){ return this.rocks.filter(r=>r.dead||!game.ents.includes(r)).length; },
+    teardown(){ for (const r of this.rocks||[]) r.dead=true; } },
+  { action:'magnet', title:'Star magnet', goal:'Pull in the stars beside you', need:3,
+    setup(){ this.c=game.combo; this.spawn(); },
+    spawn(){ const sx = game.ship.x, sy = game.ship.y; for (const [x,y] of [[sx-170,sy-120],[sx+170,sy-120],[sx,sy-230]]) spawnStar(clamp(x,20,W-20),y,0); },
+    check(){ const got = Math.min(3, game.combo-this.c); if (got < 3 && !game.ents.some(e=>e.t==='star')) this.spawn(); return got; },
+    teardown(){ for (const e of game.ents) if (e.t==='star') e.dead=true; } },
+  { action:'pause',  title:'Pause',      goal:'Pause the game, then resume it', need:2,
+    setup(){ this.paused=false; this.resumed=false; },
+    check(){ return (this.paused?1:0)+(this.resumed?1:0); } },
+];
+function startTutorial(afterMode) {
+  newRun(false); game.tutorial = { i:-1, after:afterMode, done:0 }; game.hint = ''; game.hintUntil = 0;
+  nextTutorialStep();
+}
+function nextTutorialStep() {
+  const tu = game.tutorial; const prev = TUTORIAL_STEPS[tu.i]; if (prev?.teardown) prev.teardown();
+  tu.i++; tu.flash = game.runT + 1.2;
+  if (tu.i >= TUTORIAL_STEPS.length) { game.tutorial = null; Store.set('seenTutorial', true); fx('text', W/2, H*.4, "You're ready!", '#7dffb3'); Audio.level(); game.counts = {}; game.combo = 0; game.ents = []; game.score = 0; newRun(tu.after === 'gentle'); return; }
+  const s = TUTORIAL_STEPS[tu.i]; s.setup(); tu.progress = 0; Audio.level();
+}
+function tutorialUpdate(dt) {
+  const tu = game.tutorial, s = TUTORIAL_STEPS[tu.i]; if (!s) return;
+  tu.progress = s.check(dt);
+  if (tu.progress >= s.need) { fx('text', game.ship.x, game.ship.y-70, 'Nice!', '#7dffb3'); nextTutorialStep(); }
+}
+function skipTutorial() { const tu = game.tutorial; if (!tu) return; game.tutorial = null; Store.set('seenTutorial', true); newRun(tu.after === 'gentle'); UI.show(null); }
+const rnd = (a,b) => a + Math.random()*(b-a);
+function spawnRock(x, y, r, vy, vx=0, gem=false) { game.ents.push({ t:'rock', gem, x, y, r, vy, vx, rot:rnd(0,6.28), vr:rnd(-1.5,1.5), pts:Array.from({length:gem?6:7+Math.floor(rnd(0,4))},()=>gem?rnd(.85,1.1):rnd(.7,1.15)) }); }
+function spawnGem(x, y, vx, vy, val=15, col='#ff8ae2') { game.ents.push({ t:'gem', x, y, r:9, vx, vy, val, col, ph:rnd(0,6.28), rot:rnd(0,6.28), vr:rnd(-3,3) }); }
+function burstPoints(x, y) { // saucer kill: big bang + a shower of golden point pickups
+  explode(x, y, 48, '#ffd166', true);
+  const n = 10 + Math.floor(rnd(0,4));
+  for (let i=0;i<n;i++) { const a = rnd(0,6.283), s = rnd(60,160); spawnGem(x, y, Math.cos(a)*s, Math.sin(a)*s*.6 + 40, 25, '#ffd166'); }
+  fx('text', x, y-60, '+150', '#ffd166'); fx('text', x, y-30, 'POINTS!', '#fff');
+}
+function burstGems(rock) { // gem rock shatters into collectable gems that drift apart slowly
+  rock.dead = true; explode(rock.x, rock.y, rock.r*.8, '#ff8ae2');
+  const n = 5 + Math.floor(rnd(0,3));
+  for (let i=0;i<n;i++) { const a = rnd(0,6.283), s = rnd(30,90); spawnGem(rock.x, rock.y, Math.cos(a)*s, Math.max(30, rock.vy*.5) + Math.sin(a)*s*.5); }
+  fx('text', rock.x, rock.y-40, 'Gems!', '#ff8ae2');
+}
+function spawnStar(x, y, vy) { game.ents.push({ t:'star', x, y, r:11, vy, vx:0, ph:rnd(0,6.28) }); }
+function addScore(n, form=false) {
+  if (form) { n = Math.round(n*1.5); game.formBonus++; }
+  game.score += Math.round(n);
+}
+function gestureForm(action) { // was the triggering gesture near the player's max? (form bonus)
+  const gid = Object.keys(settings.map).find(k=>settings.map[k]===action);
+  return gid ? detector.state[gid].norm >= .9 : false;
+}
+function updateGame(dt, t) {
+  const L = levelDef(game.level), gm = game.gentle;
+  // boost doubles the level speed: ramps up in ~0.3 s, eases back to cruise over ~1 s when released
+  { const target = Input.boost > 0 ? 1 : 0, cur = game.boostLerp ?? 0, rate = target > cur ? dt/0.3 : dt/1.0;
+    game.boostLerp = target > cur ? Math.min(target, cur + rate) : Math.max(target, cur - rate); }
+  game.speed = L.speed * (gm ? GENTLE.speed : 1) * (1 + game.boostLerp);
+  game.runT += dt; if (!game.tutorial) game.levelT += dt;
+  if (game.tutorial) tutorialUpdate(dt);
+  // level progression
+  if (!game.tutorial && game.levelT >= L.dur) {
+    addScore(200); game.level++; game.levelT = 0; Audio.level();
+    const NL = levelDef(game.level);
+    fx('text', W/2, H*.4, `Level ${game.level} · ${NL.name}`, `hsl(${NL.hue},80%,70%)`);
+    setHint(NL.feat ? `${NL.name} — ${hintFor(NL.feat)}` : `${NL.name} — use everything you've learned!`, 8);
+    if (gm && game.level > GENTLE.maxLevel) { endRun(true); return; }
+  }
+  // level-1 tutorial: walk through every action, one hint at a time
+  if (game.level === 2 && !game.tutorial && game.runT >= game.hintUntil) {
+    const order = ['boost','blast','shield','magnet','pause'];
+    if (game.tutorialIdx < order.length) { setHint(hintFor(order[game.tutorialIdx++]), 7); }
+  }
+  // gentle rest
+  if (gm && !game.tutorial && game.runT - game.lastRest >= GENTLE.restEvery) { game.lastRest = game.runT; startRest(); return; }
+  // actions
+  for (const a of Input.fires) {
+    if (gm && t - game.lastActionT < 2000 && a !== 'pause' && game.lastAction && game.lastAction !== a) { /* gentle: never demand two gestures within 2 s — still allow, just no penalty */ }
+    game.counts[a] = (game.counts[a]||0)+1; game.lastAction = a; game.lastActionT = t;
+    if (a==='pause') { pauseGame('Paused'); return; }
+    if (a==='shield') { game.shieldUntil = t + 1500; Audio.shield(); fx('ring', game.ship.x, game.ship.y, 60, '#63d2ff'); }
+    if (a==='magnet') { game.magnetUntil = t + 2000; Audio.magnet(); }
+    if (a==='blast') { // twin cannons: one shot from each side of the ship, straight ahead
+      Audio.shot(); const form = gestureForm('blast');
+      for (const dx of [-16, 16]) game.ents.push({ t:'shot', x:game.ship.x+dx, y:game.ship.y-10, r:5, vy:-820, vx:game.ship.vx*.15, form });
+      fx('burst', game.ship.x-16, game.ship.y-14, 6, '#ffb347'); fx('burst', game.ship.x+16, game.ship.y-14, 6, '#ffb347');
+    }
+  }
+  // boost multiplier
+  if (Input.boost > 0) { game.mult = Math.min(3, game.mult + .1*dt); if (t - game.lastBoostTick > 1000) { game.lastBoostTick = t; Audio.boostTick(); } }
+  // ship
+  const sh = game.ship; const target = Input.steer * 420;
+  sh.vx += (target - sh.vx) * Math.min(1, dt*8);
+  if (Input.steer === 0) sh.vx += ((W/2 - sh.x)*.4 - sh.vx) * Math.min(1, dt*1.2); // drift back to center
+  sh.x = clamp(sh.x + sh.vx*dt, 30, W-30);
+  // spawning
+  const dens = game.tutorial ? 0 : gm ? GENTLE.density : 1;
+  game.spawnAcc.rocks += dt * L.rocks/10 * dens; game.spawnAcc.stars += dt * L.stars/10 * (game.tutorial ? 0 : 1);
+  const baseV = 220 * L.speed * (gm ? GENTLE.speed : 1); // boost is applied live to every scrolling object below, not baked in at spawn
+  while (game.spawnAcc.rocks >= 1) {
+    game.spawnAcc.rocks--;
+    if (L.walls && Math.random() < .25) { const gap = rnd(80, W-80); for (let x=30;x<W;x+=70) if (Math.abs(x-gap) > 75) spawnRock(x, -40, 24, baseV); }
+    else if (L.clusters && Math.random() < .25) { const cx = rnd(80,W-80), cy=-60; for (let i=0;i<4;i++) spawnRock(cx+rnd(-50,50), cy+rnd(-40,40), rnd(14,22), baseV*.9, rnd(-20,20)); }
+    else if (L.comets && Math.random() < .3) { const fromLeft = Math.random()<.5; spawnRock(fromLeft?-30:W+30, rnd(-40,200), 16, baseV*1.3, fromLeft?rnd(120,220):-rnd(120,220)); }
+    else if (Math.random() < (L.gemChance ?? .1)) spawnRock(rnd(30,W-30), -40, rnd(20,30), baseV*.85, 0, true); // gem rock: 1 in 10 by default
+    else spawnRock(rnd(30,W-30), -40, rnd(16,34), baseV * (L.fast && Math.random()<.4 ? 1.6 : 1));
+  }
+  while (game.spawnAcc.stars >= 1) {
+    game.spawnAcc.stars--;
+    if (L.streams && Math.random() < .35) { const x = rnd(60,W-60); for (let i=0;i<6;i++) spawnStar(x, -30 - i*44, baseV); }
+    else spawnStar(rnd(30,W-30), -30, baseV);
+  }
+  // rare enemy saucer: crosses the screen and lobs slow, dodgeable shots (level 2+, never in the tutorial)
+  if (!game.tutorial && game.level >= 4 && t > game.nextUfo && !game.ents.some(e=>e.t==='ufo')) {
+    game.nextUfo = t + rnd(25000, 45000);
+    const fromLeft = Math.random() < .5;
+    game.ents.push({ t:'ufo', x: fromLeft ? -50 : W+50, y0: rnd(130, 300), y: 0, vx: (fromLeft?1:-1) * (80 + game.level*8) * (gm?.7:1), vy:0, r:24, hp:3, nextShot: t + 900, bob: rnd(0,6.28) });
+    fx('text', W/2, 130, 'Incoming!', '#ff6b8b'); Audio.ebullet();
+  }
+  // entities
+  const magnet = t < game.magnetUntil, shield = t < game.shieldUntil, hb = gm ? GENTLE.hitbox : 1;
+  for (const e of game.ents) {
+    const scroll = (e.t==='rock' || e.t==='star' || e.t==='gem') ? 1 + game.boostLerp : 1; // boost speeds up the world, not your own shots or the saucer
+    e.y += e.vy*dt*scroll; e.x += e.vx*dt*scroll; if (e.rot!==undefined) e.rot += e.vr*dt;
+    if (e.t==='shot') {
+      for (const r of game.ents) {
+        if (r.dead || (r.t!=='rock' && r.t!=='ufo') || Math.hypot(r.x-e.x, r.y-e.y) >= r.r + e.r) continue;
+        e.dead = true;
+        if (r.t==='rock') { if (r.gem) burstGems(r); else { r.dead = true; addScore(25*game.mult, e.form); explode(r.x, r.y, r.r, `hsl(${L.hue},80%,65%)`); } }
+        else { r.hp--; r.hitFlash = t + 120; fx('burst', e.x, e.y, 14, '#fff'); Audio.hit2(); if (r.hp <= 0) { r.dead = true; addScore(150*game.mult, e.form); burstPoints(r.x, r.y); } }
+        break;
+      }
+      if (e.y < -20) e.dead = true; continue;
+    }
+    if ((e.t==='star' || e.t==='gem') && magnet) { const dx = sh.x-e.x, dy = sh.y-e.y, d = Math.hypot(dx,dy); if (d < 260) { e.x += dx/d*520*dt; e.y += dy/d*520*dt; } }
+    if (e.t==='gem') { e.vx *= (1 - dt*1.2); const dd = Math.hypot(e.x-sh.x, e.y-sh.y); // gems drift apart then settle, worth more than stars
+      if (dd < e.r + sh.r + 4) { e.dead = true; game.combo++; const v = e.val ?? 15; addScore(v*game.mult, gestureForm('magnet') && magnet); Audio.star(); fx('burst', e.x, e.y, 8, e.col || '#ff8ae2'); if (v >= 25) fx('text', e.x, e.y-16, `+${Math.round(v*game.mult)}`, e.col || '#ffd166'); }
+      if (e.y > H+40) e.dead = true; continue; }
+    const d = Math.hypot(e.x-sh.x, e.y-sh.y);
+    if (e.t==='ufo') {
+      e.y = e.y0 + Math.sin(t/500 + e.bob)*22;
+      if (t > e.nextShot) { e.nextShot = t + (gm ? 1900 : 1300); const dx = sh.x-e.x, dy = sh.y-e.y, dd = Math.hypot(dx,dy)||1, v = gm ? 170 : 240;
+        // laser burst: aimed at where the player is now, then flies straight — steer out of its line
+        game.ents.push({ t:'ebullet', x:e.x, y:e.y+14, vx:dx/dd*v, vy:dy/dd*v, r:6, len:34 }); Audio.ebullet(); }
+      if (e.x < -80 || e.x > W+80) e.dead = true; continue;
+    }
+    if (e.t==='ebullet') {
+      if (d < e.r + sh.r*hb) { e.dead = true; if (shield) { addScore(5); fx('burst', e.x, e.y, 12, '#63d2ff'); } else if (t > game.invuln) hitShip(t); }
+      if (e.y > H+40 || e.x < -40 || e.x > W+40) e.dead = true; continue;
+    }
+    if (e.t==='star' && d < (e.r+sh.r)) { e.dead = true; game.combo++; addScore(10*game.mult, gestureForm('magnet') && magnet); Audio.star(); fx('burst', e.x, e.y, 8, '#fff59d'); if (game.combo % 10 === 0) { addScore(100); fx('text', sh.x, sh.y-60, `Combo ${game.combo}!`, '#7dffb3'); } }
+    if (e.t==='rock') {
+      if (d < (e.r+sh.r)*hb) {
+        if (e.gem) { burstGems(e); }
+        else if (shield) { e.dead = true; addScore(5); fx('burst', e.x, e.y, e.r, '#63d2ff'); }
+        else if (t > game.invuln) { e.dead = true; hitShip(t); }
+      } else if (d < e.r+sh.r+20 && e.y > sh.y && !e.near) { e.near = true; addScore(5); if (t-game.lastNear>300){ game.lastNear=t; fx('text', sh.x+30, sh.y-30, 'close!', '#8b95c0'); } }
+    }
+    if (e.y > H+60 || e.x < -80 || e.x > W+80) e.dead = true;
+  }
+  game.ents = game.ents.filter(e=>!e.dead);
+  for (const f of game.fx) f.age += dt; game.fx = game.fx.filter(f=>f.age < f.life);
+  if (game.hitFlash > 0) game.hitFlash -= dt;
+}
+function hitShip(t) {
+  Audio.hit(); game.combo = 0; game.mult = 1; game.invuln = t + 1200;
+  if (!settings.reduceMotion && !game.gentle) { game.hitFlash = .3; game.shake = .4; }
+  explode(game.ship.x, game.ship.y, 26, '#ff6b8b');
+  if (game.gentle) { game.score = Math.round(game.score*.9); fx('text', game.ship.x, game.ship.y-50, '-10%', '#ff6b8b'); }
+  else { game.lives--; if (game.lives <= 0) endRun(false); }
+}
+function fx(kind, x, y, v, color, text) { game.fx.push({ kind, x, y, v, color, text: typeof v==='string'?v:text, age:0, life: kind==='text'?1.2:.5 }); }
+function explode(x, y, r, color, big=false) { // particles + flash + ring + shake + sound
+  Audio.explode(big);
+  const parts = Array.from({ length: 16 + Math.round(r/2) }, () => ({ a: rnd(0,6.283), s: rnd(70,280)*(r/25), sz: rnd(1.5,4.5), c: Math.random() < .3 ? '#ffffff' : color, spin: rnd(-6,6) }));
+  const chunks = Array.from({ length: 3 + Math.round(r/12) }, () => ({ a: rnd(0,6.283), s: rnd(30,110)*(r/25), sz: rnd(3,7)*(r/25), rot: rnd(0,6.283), spin: rnd(-8,8) }));
+  game.fx.push({ kind:'boom', x, y, v:r, color, parts, chunks, age:0, life: big ? 1.1 : .8 });
+  fx('ring', x, y, r*2.5, color);
+  if (!settings.reduceMotion) game.shake = Math.max(game.shake||0, Math.min(.5, r/70) * (big ? 1.6 : 1));
+}
+function startPlay(gentle) {
+  if (!Store.get('seenHowto', false)) { UI.howto(gentle ? 'gentle' : 'normal'); return; }
+  if (!Store.get('seenTutorial', false)) { startTutorial(gentle ? 'gentle' : 'normal'); UI.show(null); return; }
+  newRun(gentle); UI.show(null);
+}
+function pauseGame(title, text) {
+  if (game.mode!=='play') return; game.mode='paused'; Audio.pause();
+  if (game.tutorial && TUTORIAL_STEPS[game.tutorial.i]?.action==='pause') TUTORIAL_STEPS[game.tutorial.i].paused = true;
+  $('skipTutorial').classList.toggle('hidden', !game.tutorial);
+  $('pauseTitle').textContent = title; $('pauseText').textContent = text || 'Open your mouth wide or press Space to resume.';
+  $('pauseLegend').innerHTML = UI.legendHtml();
+  UI.show('s-pause');
+}
+function resumeGame() {
+  if (game.mode!=='paused') return; game.mode='play'; game.lastActionT = now(); UI.show(null);
+  const s = game.tutorial && TUTORIAL_STEPS[game.tutorial.i]; if (s?.action==='pause' && s.paused) s.resumed = true;
+}
+let restUntil = 0;
+function startRest() { game.mode='rest'; restUntil = now() + GENTLE.restFor*1000; UI.show('s-rest'); }
+function endRun(victory) {
+  game.mode='over'; UI.gameOver(victory);
+}
+
+/* =====================================================================
+   7. RENDERER (Canvas 2D)
+   ===================================================================== */
+const canvas = $('game'), ctx = canvas.getContext('2d');
+const starfield = Array.from({length:140},()=>({x:Math.random()*W, y:Math.random()*H, z:rnd(.3,1)}));
+function fitCanvas() {
+  const s = Math.min(window.innerWidth/W, window.innerHeight/H);
+  canvas.style.width = (W*s)+'px'; canvas.style.height = (H*s)+'px';
+  const dpr = Math.min(2, window.devicePixelRatio||1); canvas.width = W*dpr; canvas.height = H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize', fitCanvas); fitCanvas();
+function render(dt, t) {
+  ctx.fillStyle = '#03050f'; ctx.fillRect(0,0,W,H);
+  const sp = game.mode==='play' ? game.speed : .3;
+  const bl = game.mode==='play' ? (game.boostLerp || 0) : 0; // boosting: stars rush past and stretch into streaks
+  for (const s of starfield) { s.y += 60*s.z*sp*dt*(1 + bl*2.5); if (s.y > H) { s.y = 0; s.x = Math.random()*W; }
+    const len = s.z*2 + bl*s.z*34; ctx.fillStyle = `rgba(200,215,255,${.25+.6*s.z})`; ctx.fillRect(s.x, s.y - len, s.z*2, len); }
+  if (game.mode==='title' || game.mode==='over' && !game.ents.length) return;
+  const L = levelDef(game.level), sh = game.ship;
+  // level-tinted nebula so each level has its own look
+  const neb = ctx.createRadialGradient(W*.5, -100, 50, W*.5, -100, H*1.1); neb.addColorStop(0, `hsla(${L.hue},70%,35%,.32)`); neb.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = neb; ctx.fillRect(0,0,W,H);
+  ctx.save();
+  if (game.shake > 0) { ctx.translate(rnd(-1,1)*game.shake*16, rnd(-1,1)*game.shake*16); game.shake = Math.max(0, game.shake - dt*1.6); }
+  for (const e of game.ents) {
+    if (e.t==='shot') { ctx.fillStyle='#ffb347'; ctx.beginPath(); ctx.ellipse(e.x, e.y, 3, 9, 0, 0, 6.283); ctx.fill(); ctx.fillStyle='#fff3'; ctx.fillRect(e.x-1, e.y, 2, 14); }
+    else if (e.t==='ebullet') { // glowing laser line along its direction of travel
+      const sp = Math.hypot(e.vx, e.vy) || 1, ux = e.vx/sp, uy = e.vy/sp, L2 = e.len || 30;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,107,139,.25)'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(e.x - ux*L2, e.y - uy*L2); ctx.lineTo(e.x, e.y); ctx.stroke();
+      ctx.strokeStyle = '#ff6b8b'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(e.x - ux*L2, e.y - uy*L2); ctx.lineTo(e.x, e.y); ctx.stroke();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(e.x - ux*L2*.8, e.y - uy*L2*.8); ctx.lineTo(e.x, e.y); ctx.stroke();
+      ctx.lineCap = 'butt'; }
+    else if (e.t==='ufo') { ctx.save(); ctx.translate(e.x, e.y); const flash = e.hitFlash > t;
+      ctx.fillStyle = flash ? '#ffffff' : '#2b3560'; ctx.beginPath(); ctx.ellipse(0, 6, 30, 10, 0, 0, 6.283); ctx.fill(); ctx.strokeStyle='#ff6b8b'; ctx.lineWidth=2; ctx.stroke();
+      ctx.fillStyle='#ffd1da'; ctx.beginPath(); ctx.arc(0, -2, 13, Math.PI, 0); ctx.fill();
+      for (let i=-2;i<=2;i++) { ctx.fillStyle = Math.floor(t/150+i)%2 ? '#ff6b8b' : '#63d2ff'; ctx.beginPath(); ctx.arc(i*11, 8, 2.5, 0, 6.283); ctx.fill(); }
+      for (let i=0;i<e.hp;i++) { ctx.fillStyle='#ff6b8b'; ctx.fillRect(-12+i*9, -22, 6, 3); }
+      ctx.restore(); }
+    else if (e.t==='star') { ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(t/400+e.ph); const g = ctx.createRadialGradient(0,0,2,0,0,16); g.addColorStop(0,'#fff'); g.addColorStop(.4,'#fff59d'); g.addColorStop(1,'rgba(255,245,157,0)'); ctx.fillStyle=g; ctx.fillRect(-16,-16,32,32); ctx.fillStyle='#fff8c8'; starPath(0,0,9,4); ctx.fill(); ctx.restore(); }
+    else if (e.t==='gem') { const col = e.col || '#ff8ae2', gold = col === '#ffd166'; ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(gold ? 0 : e.rot + t/600); const g = ctx.createRadialGradient(0,0,1,0,0,14); g.addColorStop(0,'#fff'); g.addColorStop(.5,col); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.globalAlpha=.8; ctx.fillRect(-14,-14,28,28); ctx.globalAlpha=1;
+      if (gold) { const sq = Math.abs(Math.cos(t/250 + e.ph)); ctx.beginPath(); ctx.ellipse(0, 0, 8*Math.max(.25,sq), 8, 0, 0, 6.283); ctx.fillStyle='#ffe59a'; ctx.fill(); ctx.strokeStyle='#ffb347'; ctx.lineWidth=1.5; ctx.stroke(); ctx.fillStyle='#b8741a'; ctx.font='bold 9px system-ui'; ctx.textAlign='center'; if (sq > .5) ctx.fillText('25', 0, 3); }
+      else { ctx.beginPath(); ctx.moveTo(0,-9); ctx.lineTo(6,0); ctx.lineTo(0,9); ctx.lineTo(-6,0); ctx.closePath(); ctx.fillStyle='#ffd6f5'; ctx.fill(); ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.stroke(); }
+      ctx.restore(); }
+    else if (e.gem) { ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(e.rot); ctx.beginPath(); e.pts.forEach((p,i)=>{ const a=i/e.pts.length*6.283; ctx[i?'lineTo':'moveTo'](Math.cos(a)*e.r*p, Math.sin(a)*e.r*p); }); ctx.closePath();
+      ctx.fillStyle='#4a2a55'; ctx.fill(); ctx.strokeStyle='#ff8ae2'; ctx.lineWidth=2; ctx.stroke();
+      for (let i=0;i<3;i++) { const a = i*2.1 + t/900, rr = e.r*.45; ctx.beginPath(); ctx.moveTo(Math.cos(a)*rr, Math.sin(a)*rr-5); ctx.lineTo(Math.cos(a)*rr+4, Math.sin(a)*rr); ctx.lineTo(Math.cos(a)*rr, Math.sin(a)*rr+5); ctx.lineTo(Math.cos(a)*rr-4, Math.sin(a)*rr); ctx.closePath(); ctx.fillStyle = Math.floor(t/200+i)%3 ? '#ff8ae2' : '#fff'; ctx.fill(); }
+      ctx.restore(); }
+    else { ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(e.rot); ctx.beginPath(); e.pts.forEach((p,i)=>{ const a=i/e.pts.length*6.283; ctx[i?'lineTo':'moveTo'](Math.cos(a)*e.r*p, Math.sin(a)*e.r*p); }); ctx.closePath(); ctx.fillStyle=`hsl(${L.hue},22%,${L.small?30:38}%)`; ctx.fill(); ctx.strokeStyle=`hsl(${L.hue},45%,68%)`; ctx.lineWidth=2; ctx.stroke(); ctx.restore(); }
+  }
+  // ship
+  ctx.save(); ctx.translate(sh.x, sh.y); ctx.rotate(sh.vx/1400);
+  if (t < game.invuln && Math.floor(t/100)%2) ctx.globalAlpha = .4;
+  if (Input.boost>0) { ctx.fillStyle = `rgba(99,210,255,${.5+.5*Math.random()})`; ctx.beginPath(); ctx.moveTo(-7,16); ctx.lineTo(0,30+Input.boost*20+Math.random()*8); ctx.lineTo(7,16); ctx.fill(); }
+  ctx.beginPath(); ctx.moveTo(0,-22); ctx.lineTo(14,14); ctx.lineTo(0,8); ctx.lineTo(-14,14); ctx.closePath(); ctx.fillStyle='#e8ecff'; ctx.fill(); ctx.strokeStyle='#63d2ff'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#63d2ff'; ctx.beginPath(); ctx.arc(0,-4,4,0,6.283); ctx.fill();
+  ctx.restore();
+  if (t < game.shieldUntil) { ctx.beginPath(); ctx.arc(sh.x, sh.y, 36, 0, 6.283); ctx.strokeStyle = `rgba(99,210,255,${.5+.4*Math.sin(t/60)})`; ctx.lineWidth = 3; ctx.stroke(); }
+  if (t < game.magnetUntil) { ctx.beginPath(); ctx.arc(sh.x, sh.y, 260, 0, 6.283); ctx.strokeStyle = 'rgba(255,245,157,.25)'; ctx.setLineDash([6,10]); ctx.lineWidth=2; ctx.stroke(); ctx.setLineDash([]); }
+  // fx
+  for (const f of game.fx) {
+    const k = f.age/f.life; ctx.globalAlpha = 1-k;
+    if (f.kind==='burst') { ctx.strokeStyle=f.color; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(f.x,f.y,f.v*(.5+k*1.5),0,6.283); ctx.stroke(); }
+    if (f.kind==='ring') { ctx.strokeStyle=f.color; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(f.x,f.y,f.v*k+20,0,6.283); ctx.stroke(); }
+    if (f.kind==='cone') { ctx.fillStyle=f.color; ctx.beginPath(); ctx.moveTo(f.x,f.y-10); ctx.lineTo(f.x-60-800*.45, f.y-800); ctx.lineTo(f.x+60+800*.45, f.y-800); ctx.closePath(); ctx.globalAlpha=(1-k)*.25; ctx.fill(); }
+    if (f.kind==='text') { ctx.fillStyle=f.color; ctx.font='bold 22px system-ui'; ctx.textAlign='center'; ctx.fillText(f.text, f.x, f.y - k*40); }
+    if (f.kind==='boom') {
+      if (k < .2) { ctx.globalAlpha = (1-k/.2)*.9; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(f.x,f.y,f.v*(1+k*5),0,6.283); ctx.fill(); ctx.globalAlpha = 1-k; }
+      for (const p of f.parts) { const dd = p.s*f.age*(1-k*.4); ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(f.x+Math.cos(p.a)*dd, f.y+Math.sin(p.a)*dd, p.sz*(1-k), 0, 6.283); ctx.fill(); }
+      for (const c of f.chunks) { const dd = c.s*f.age; ctx.save(); ctx.translate(f.x+Math.cos(c.a)*dd, f.y+Math.sin(c.a)*dd + 40*f.age*f.age); ctx.rotate(c.rot + c.spin*f.age); ctx.fillStyle = f.color; ctx.globalAlpha = (1-k)*.8; ctx.fillRect(-c.sz/2, -c.sz/2, c.sz, c.sz); ctx.restore(); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (game.hitFlash > 0) { ctx.fillStyle = `rgba(255,107,139,${game.hitFlash})`; ctx.fillRect(0,0,W,H); }
+  // tutorial overlay
+  if (game.tutorial && game.mode==='play') {
+    const tu = game.tutorial, s = TUTORIAL_STEPS[tu.i];
+    if (s) {
+      if (s.action==='steer') { ctx.fillStyle = s.left ? 'rgba(125,255,179,.15)' : 'rgba(99,210,255,.18)'; ctx.fillRect(0, sh.y-120, 130, 240); ctx.fillStyle = s.right ? 'rgba(125,255,179,.15)' : 'rgba(99,210,255,.18)'; ctx.fillRect(W-130, sh.y-120, 130, 240);
+        ctx.strokeStyle = '#63d2ff'; ctx.setLineDash([8,8]); ctx.strokeRect(0, sh.y-120, 130, 240); ctx.strokeRect(W-130, sh.y-120, 130, 240); ctx.setLineDash([]); }
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#0b1230e6'; ctx.fillRect(W/2-280, 66, 560, 176);
+      ctx.fillStyle = '#8b95c0'; ctx.font = '14px system-ui'; ctx.fillText(`TUTORIAL  ·  step ${tu.i+1} of ${TUTORIAL_STEPS.length}  ·  Esc to skip`, W/2, 90);
+      ctx.fillStyle = '#e8ecff'; ctx.font = 'bold 28px system-ui'; ctx.fillText(s.title, W/2, 124);
+      ctx.fillStyle = '#63d2ff'; ctx.font = '19px system-ui'; ctx.fillText(hintFor(s.action), W/2, 154);
+      ctx.fillStyle = '#c9d0f0'; ctx.font = '16px system-ui'; ctx.fillText(s.goal, W/2, 180);
+      const p = tu.progress || 0; ctx.fillStyle = '#7dffb3'; ctx.font = 'bold 20px system-ui'; ctx.fillText(s.fmt ? s.fmt(p) : `${Math.floor(p)} / ${s.need}`, W/2, 212);
+      const g = gestureFor(s.action), st = g && detector.state[g];
+      if (st && !settings.keyboardOnly) { ctx.fillStyle = '#1a2447'; ctx.fillRect(W/2-150, 224, 300, 6); ctx.fillStyle = st.above ? '#7dffb3' : '#63d2ff'; ctx.fillRect(W/2-150, 224, 300*st.norm, 6); }
+    }
+  }
+  ctx.restore(); // end shake
+  // ---- on-canvas HUD: score (top right), level (top centre), ships remaining (bottom left)
+  ctx.textAlign='right'; ctx.fillStyle='#e8ecff'; ctx.font='bold 28px system-ui'; ctx.fillText(game.score.toLocaleString(), W-16, 36);
+  ctx.font='13px system-ui'; ctx.fillStyle = Input.boost > 0 ? '#7dffb3' : '#8b95c0'; ctx.fillText(`×${game.mult.toFixed(1)} multiplier${game.gentle?' · gentle':''}`, W-16, 56);
+  if (!game.tutorial) {
+    ctx.textAlign='center'; ctx.fillStyle=`hsl(${L.hue},80%,75%)`; ctx.font='bold 14px system-ui'; ctx.fillText(`LEVEL ${game.level} · ${L.name.toUpperCase()}`, W/2, 24);
+    ctx.fillStyle='#1a2447'; ctx.fillRect(W/2-100, 32, 200, 5); ctx.fillStyle=`hsl(${L.hue},80%,65%)`; ctx.fillRect(W/2-100, 32, 200*clamp(game.levelT/L.dur,0,1), 5);
+  }
+  if (!game.gentle) { for (let i=0;i<game.lives;i++) shipIcon(28+i*30, H-26, .55, i < game.lives); ctx.textAlign='left'; ctx.fillStyle='#8b95c0'; ctx.font='11px system-ui'; ctx.fillText('SHIPS', 16, H-48); }
+  if (Face.ready && !Face.faceFound && !settings.keyboardOnly && game.mode==='play') { ctx.fillStyle='#ffb347'; ctx.font='16px system-ui'; ctx.textAlign='center'; ctx.fillText('Looking for your face…', W/2, H-30); }
+  else if (game.hint && game.runT < game.hintUntil && game.mode==='play') {
+    const a = clamp(Math.min(game.hintUntil - game.runT, 1), 0, 1);
+    ctx.font = '20px system-ui'; let tw = ctx.measureText(game.hint).width; if (tw > W-60) { ctx.font = '16px system-ui'; tw = ctx.measureText(game.hint).width; }
+    const bw = Math.min(W-20, tw + 40);
+    ctx.globalAlpha = a; ctx.fillStyle = '#0b1230dd'; ctx.fillRect(W/2-bw/2, H-124, bw, 44);
+    ctx.fillStyle = '#e8ecff'; ctx.textAlign = 'center'; ctx.fillText(game.hint, W/2, H-96, W-40); ctx.globalAlpha = 1;
+  }
+}
+function shipIcon(x, y, s, on) { ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.beginPath(); ctx.moveTo(0,-22); ctx.lineTo(14,14); ctx.lineTo(0,8); ctx.lineTo(-14,14); ctx.closePath(); ctx.fillStyle = on ? '#e8ecff' : '#2a3560'; ctx.fill(); ctx.strokeStyle='#63d2ff'; ctx.lineWidth=2; ctx.stroke(); ctx.restore(); }
+function starPath(x,y,R,r){ ctx.beginPath(); for(let i=0;i<10;i++){ const a=i*Math.PI/5-Math.PI/2, rr=i%2?r:R; ctx[i?'lineTo':'moveTo'](x+Math.cos(a)*rr, y+Math.sin(a)*rr);} ctx.closePath(); }
+
+/* =====================================================================
+   8. UI / HUD / SCREENS
+   ===================================================================== */
+let debugOn = false;
+const UI = {
+  current:null,
+  show(id) { document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('hidden', s.id!==id)); this.current = id;
+    const inPlay = ['s-pause','s-rest',null].includes(id) && game.mode!=='title';
+    $('hud').classList.toggle('hidden', !inPlay); $('score').classList.add('hidden'); // score is drawn on the canvas
+    $('preview').classList.toggle('hidden', !(settings.preview && Face.ready && (inPlay || id==='s-cal' || id==='s-title')));
+    $('preview').classList.toggle('big', id==='s-cal');
+  },
+  legendHtml() {
+    return GESTURES.map(g => { const a = settings.map[g.id], info = ACTION_INFO[a]; const off = !settings.enabled[g.id];
+      return `<li style="${off?'opacity:.4':''}">${GESTURE_INFO[g.id].emoji} <b>${GESTURE_INFO[g.id].how}</b> → <b>${info?.name ?? a}</b> — ${info?.desc ?? ''}${g.id==='eyes'?' (hold, not a blink)':''}${off?' (disabled)':''}</li>`; }).join('');
+  },
+  howto(startMode) {
+    $('howtoList').innerHTML = this.legendHtml();
+    this.pendingStart = startMode ?? null; $('howtoStart').classList.toggle('hidden', !startMode);
+    this.show('s-howto');
+  },
+  buildHud() { $('hud').innerHTML = GESTURES.map(g=>`<div class="meter" id="m-${g.id}"><span class="lbl">${GESTURE_INFO[g.id].emoji} ${GESTURE_INFO[g.id].name} → <b>${ACTION_INFO[settings.map[g.id]]?.name ?? settings.map[g.id]}</b></span><div class="bar"><div class="fill"></div><div class="thr"></div></div></div>`).join(''); },
+  updateHud() {
+    for (const g of GESTURES) {
+      const el = $('m-'+g.id); if (!el) continue; const st = detector.state[g.id], th = detector.thresholds(g);
+      el.classList.toggle('active', st.above); el.classList.toggle('disabled', !settings.enabled[g.id]);
+      el.querySelector('.fill').style.width = (st.norm*100)+'%'; el.querySelector('.thr').style.left = (clamp(th.on,0,1)*100)+'%';
+      if (g.type==='longhold' && st.above && !st.fired) el.querySelector('.fill').style.background = `linear-gradient(90deg,#7dffb3 ${st.progress*100}%,#63d2ff 0)`; else el.querySelector('.fill').style.background='';
+    }
+    $('scoreVal').textContent = game.score; $('scoreSub').textContent = `Level ${game.level} · ×${game.mult.toFixed(1)}${game.gentle?' · gentle':''}`;
+  },
+  updateDebug() {
+    if (!debugOn) return;
+    const rows = Object.entries(Face.bs).sort().map(([k,v])=>`${k.padEnd(22,'.')}${v.toFixed(2)}`).join('<br>');
+    const g = GESTURES.map(x=>{const s=detector.state[x.id];return `${x.id.padEnd(7)} raw ${s.raw.toFixed(2)} norm ${s.norm.toFixed(2)} ${s.above?'ON':'  '}`}).join('<br>');
+    const cal = calibration ? GESTURES.map(x=>`${x.id}: n ${(calibration.neutral[x.id]??0).toFixed(2)} m ${(calibration.max[x.id]??0).toFixed(2)} s ${calibration.sign?.[x.id]??1}`).join('<br>') : 'no calibration';
+    $('debug').innerHTML = `<div class="hdr">infer ${Face.inferMs.toFixed(1)} ms · ${Face.fps} fps · yaw ${Face.yaw.toFixed(2)} · face ${Face.faceFound}<br>${g}<br>cheekGeo ${cheekGeo().toFixed(3)} · cheekPuff bs ${(Face.bs.cheekPuff||0).toFixed(2)} · model ${(calibration?.cheekModel||Cal.cheekModel) ? modelScore(calibration?.cheekModel||Cal.cheekModel, featVec()).toFixed(2) : 'none'}<br>steer ${Input.steer.toFixed(2)} boost ${Input.boost.toFixed(2)}<br><span style="color:#8b95c0">${cal}</span></div>${rows}`;
+  },
+  // ---- game over / name entry ----
+  name:['A','A','A'], nameIdx:0, pendingEntry:null,
+  gameOver(victory) {
+    const rows = [['Score', game.score], ['Level reached', game.level], ['Form bonuses', game.formBonus]];
+    for (const a of ACTIONS) if (game.counts[a]) rows.push([`${ACTION_INFO[a]?.name ?? a} used`, game.counts[a]]);
+    $('overTitle').textContent = victory ? '🎉 Course complete!' : 'Run complete';
+    $('overTable').innerHTML = rows.map(r=>`<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
+    const board = Store.get('leaderboard.'+(game.gentle?'gentle':'normal'), []);
+    const qualifies = game.score > 0 && (board.length < 10 || game.score > board[board.length-1].score);
+    this.pendingEntry = qualifies ? { score:game.score, level:game.level, date:new Date().toISOString().slice(0,10) } : null;
+    this.name = ['A','A','A']; this.nameIdx = 0; $('nameEntry').classList.toggle('hidden', !qualifies); this.renderName();
+    this.show('s-over');
+  },
+  renderName() {
+    $('nameBig').className = 'picker';
+    $('nameBig').innerHTML = this.name.map((c,i)=>`<div class="col ${i===this.nameIdx?'cur':''}" data-col="${i}"><button data-name="up">▲</button><div class="ch" data-name="sel">${c}</div><button data-name="down">▼</button></div>`).join('');
+  },
+  nameCycle(d=1) { const L='ABCDEFGHIJKLMNOPQRSTUVWXYZ'; const i=(L.indexOf(this.name[this.nameIdx])+d+26)%26; this.name[this.nameIdx]=L[i]; this.renderName(); },
+  nameAdvance() { if (this.nameIdx < 2) { this.nameIdx++; this.renderName(); } else this.commitName(); },
+  commitName() {
+    if (!this.pendingEntry) return; const key='leaderboard.'+(game.gentle?'gentle':'normal');
+    const board = Store.get(key, []); board.push({ name:this.name.join(''), ...this.pendingEntry }); board.sort((a,b)=>b.score-a.score); Store.set(key, board.slice(0,10));
+    this.pendingEntry = null; $('nameEntry').classList.add('hidden'); Audio.level();
+  },
+  // ---- leaderboard ----
+  board(mode) {
+    $('tabNormal').classList.toggle('on', mode==='normal'); $('tabGentle').classList.toggle('on', mode==='gentle');
+    const b = Store.get('leaderboard.'+mode, []);
+    $('boardTable').innerHTML = '<tr><th>#</th><th>Name</th><th>Score</th><th>Level</th><th>Date</th></tr>' + (b.length ? b.map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.score}</td><td>${r.level}</td><td>${r.date}</td></tr>`).join('') : '<tr><td colspan=5>No runs yet</td></tr>');
+    this.show('s-board');
+  },
+  // ---- settings ----
+  settings() {
+    const opt = (label, ctl) => `<label class="opt"><span>${label}</span>${ctl}</label>`;
+    let h = '<h3>Gestures</h3>';
+    for (const g of GESTURES) h += opt(`${g.label}`, `<span><input type="checkbox" data-s="enabled.${g.id}" ${settings.enabled[g.id]?'checked':''}> <input type="range" min=".6" max="1.4" step=".05" data-s="sens.${g.id}" value="${settings.sens[g.id]}" title="sensitivity"> <select data-s="map.${g.id}">${ACTIONS.map(a=>`<option ${settings.map[g.id]===a?'selected':''}>${a}</option>`).join('')}</select></span>`);
+    h += '<h3>Face</h3>';
+    h += opt('Bilateral gestures use', `<select data-s="asym">${['max','mean','left','right'].map(v=>`<option ${settings.asym===v?'selected':''}>${v}</option>`).join('')}</select>`);
+    h += opt('Eye close uses', `<select data-s="eyeMode">${['both','left','right'].map(v=>`<option ${settings.eyeMode===v?'selected':''}>${v}</option>`).join('')}</select>`);
+    h += opt('Steering', `<select data-s="steerMode"><option value="pucker" ${settings.steerMode==='pucker'?'selected':''}>pucker + head turn</option><option value="yaw" ${settings.steerMode==='yaw'?'selected':''}>head turn only</option></select>`);
+    h += opt('Invert steering', `<input type="checkbox" data-s="invertSteer" ${settings.invertSteer?'checked':''}>`);
+    h += opt('Keyboard only (no face control)', `<input type="checkbox" data-s="keyboardOnly" ${settings.keyboardOnly?'checked':''}>`);
+    h += '<h3>Display & sound</h3>';
+    h += opt('Webcam preview', `<input type="checkbox" data-s="preview" ${settings.preview?'checked':''}>`);
+    h += opt('Sound', `<input type="checkbox" data-s="sound" ${settings.sound?'checked':''}>`);
+    h += opt('Reduce motion', `<input type="checkbox" data-s="reduceMotion" ${settings.reduceMotion?'checked':''}>`);
+    h += `<p style="font-size:12px">Calibration: ${calibration ? 'saved '+calibration.date : 'not done'} · MediaPipe ${MP_VERSION}</p>`;
+    $('settingsBody').innerHTML = h;
+    $('settingsBody').querySelectorAll('[data-s]').forEach(el => el.addEventListener('input', () => {
+      const path = el.dataset.s.split('.'); const v = el.type==='checkbox' ? el.checked : el.type==='range' ? parseFloat(el.value) : el.value;
+      if (path.length===2) settings[path[0]][path[1]] = v; else settings[path[0]] = v;
+      Store.set('settings.v2', settings); document.body.classList.toggle('reduce-motion', settings.reduceMotion); UI.buildHud();
+    }));
+    this.show('s-settings');
+  },
+  // ---- keyboard in menus ----
+  key(code) {
+    if (this.current==='s-over' && this.pendingEntry) {
+      if (code==='ArrowUp') this.nameCycle(1); if (code==='ArrowDown') this.nameCycle(-1);
+      if (code==='ArrowRight'||code==='Enter'||code==='Space') this.nameAdvance(); if (code==='ArrowLeft' && this.nameIdx>0) { this.nameIdx--; this.renderName(); }
+      return;
+    }
+    if (code==='Escape' && game.mode==='play') { if (game.tutorial) skipTutorial(); else pauseGame('Paused'); }
+    if (this.current==='s-cal') Cal.key(code);
+  },
+  faceMenu(evs) { // gestures in menus
+    for (const e of evs) if (e.type==='fire') {
+      const a = settings.map[e.g];
+      if (this.current==='s-over' && this.pendingEntry) { if (a==='pause') this.nameCycle(1); if (e.g==='smile') this.nameAdvance(); }
+    }
+  },
+};
+$('nameBig').addEventListener('click', e => {
+  const el = e.target.closest('[data-name]'); if (!el || !UI.pendingEntry) return; Audio.unlock();
+  UI.nameIdx = +el.closest('[data-col]').dataset.col;
+  if (el.dataset.name==='up') UI.nameCycle(1); else if (el.dataset.name==='down') UI.nameCycle(-1); else UI.renderName();
+});
+document.body.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return; Audio.unlock();
+  const act = b.dataset.act;
+  ({
+    'play-normal': () => startPlay(false),
+    'play-gentle': () => startPlay(true),
+    'howto-start': () => { Store.set('seenHowto', true); startPlay(UI.pendingStart === 'gentle'); },
+    'tutorial': () => { Store.set('seenHowto', true); startTutorial('normal'); UI.show(null); },
+    'skip-tutorial': skipTutorial,
+    'calibrate': () => Cal.start(),
+    'leaderboard': () => { UI.commitName(); UI.board(game.gentle?'gentle':'normal'); },
+    'board-normal': () => UI.board('normal'), 'board-gentle': () => UI.board('gentle'),
+    'settings': () => UI.settings(), 'howto': () => UI.howto(),
+    'title': () => { UI.commitName(); game.mode='title'; game.ents=[]; UI.show('s-title'); },
+    'resume': resumeGame,
+    'quit': () => { game.mode='title'; game.ents=[]; UI.show('s-title'); },
+    'replay': () => { UI.commitName(); newRun(game.gentle); UI.show(null); },
+    'name-save': () => UI.commitName(),
+    'retry': () => boot(),
+    'keyboard-mode': () => { settings.keyboardOnly = true; Store.set('settings.v2', settings); $('camStatus').textContent = 'Keyboard mode'; $('camStatus').className='status warn'; UI.show('s-title'); },
+    'reset-boards': () => { if (confirm('Clear both leaderboards?')) { Store.del('leaderboard.normal'); Store.del('leaderboard.gentle'); } },
+    'reset-all': () => { if (confirm('Reset settings, calibration and leaderboards?')) { ['settings.v2','calibration.v1','leaderboard.normal','leaderboard.gentle'].forEach(Store.del); location.reload(); } },
+  })[act]?.();
+});
+
+/* =====================================================================
+   9. CALIBRATION
+   ===================================================================== */
+const Cal = {
+  step:0, samples:[], neutral:{}, max:{}, timer:0, phaseEnd:0, active:false, stepGesture:null,
+  prompts: { smile:'Smile as big as is comfortable', brow:'Raise your eyebrows as high as you can', eyes:'Gently close both eyes and keep them closed', pucker:'Pucker your lips like a kiss', cheek:'Fill both cheeks with air and keep them puffed', mouth:'Open your mouth wide' },
+  HOLD_NEEDED: 1.5, MIN_RANGE: .05, MAX_WAIT: 15,
+  start() { this.active=true; this.step=0; this.neutral={}; this.max={}; this.sign={}; this.neutralFeats=[]; this.nStats=null; this.cheekModel=null; UI.show('s-cal'); this.render(); },
+  steps() { return ['camera','neutral',...GESTURES.map(g=>g.id),'test','done']; },
+  cur() { return this.steps()[this.step]; },
+  render() {
+    const s = this.cur(), i = this.step, n = this.steps().length; $('calBar').style.width = (i/(n-1)*100)+'%';
+    $('hud').classList.toggle('hidden', s!=='test'); // live meters during the test drive
+    const btns = [], set = (t, x, b) => { $('calTitle').textContent=t; $('calText').textContent=x; $('calButtons').innerHTML=b; };
+    if (s==='camera') set('Step 1 · Camera check', 'Make sure your whole face is in the preview and well lit. Sit about arm\'s length from the screen.', `<button class="primary" data-cal="next">My face is in frame</button><button data-cal="skip">Skip calibration</button>`);
+    else if (s==='neutral') { set('Step 2 · Neutral face', 'Relax your face completely. Recording for 3 seconds…', `<button data-cal="redo">Restart</button>`); this.record(3000, 'neutral'); }
+    else if (s==='test') set('Test drive', 'Try each gesture — the meters on the left should light up. Redo any that feel off.', GESTURES.map(g=>`<button class="small" data-cal="redo-${g.id}">redo ${g.label}</button>`).join('') + `<button class="primary" data-cal="next">Looks good</button>`);
+    else if (s==='done') { this.save(); return; }
+    else { const g = GESTURES.find(x=>x.id===s); set(`Step ${i+1} · ${GESTURE_INFO[s].emoji} ${GESTURE_INFO[s].name}`, `${this.prompts[s]}. Hold it steady until the bar fills — we keep watching until we're confident.`, `<button data-cal="redo">Redo this one</button><button data-cal="accept" class="small">Accept as is</button>`); setTimeout(()=>{ if (this.cur()===s) this.record(0, s); }, 800); }
+  },
+  // Neutral: fixed 3 s. Gestures: open-ended — we watch until the signal has risen clearly above neutral
+  // and been held steadily for HOLD_NEEDED seconds (confidence), or MAX_WAIT elapses (then we ask to redo).
+  record(ms, what) { this.samples=[]; this.recWhat=what; this.recStart=now(); this.phaseEnd=now()+ms; this.peak=0; this.peakSign=0; this.holdSince=null; this.holdSamples=[]; this.holdFeats=[]; this.lastFeat=null; this.lastLift=0; if (what==='neutral') this.neutralFeats=[]; $('calStatus').textContent='Recording…'; $('calStatus').className='status warn'; },
+  tick(t) {
+    if (!this.active) return;
+    const s = this.cur();
+    if (!this.recWhat) { $('calStatus').className = Face.faceFound ? 'status ok' : 'status bad'; $('calStatus').textContent = Face.faceFound ? 'Face detected' : 'No face detected — move into the frame'; }
+    else if (!Face.faceFound) { $('calStatus').className='status bad'; $('calStatus').textContent='Lost your face — move back into the frame'; this.phaseEnd = t + 1500; this.holdSince = null; }
+    else if (this.recWhat==='neutral') {
+      this.samples.push(Object.fromEntries(GESTURES.map(g=>[g.id, rawScore(g, Face.bs)])));
+      this.neutralFeats.push(featVec()); // full face stats at rest, for the learned cheek model
+      $('calStatus').className='status warn'; $('calStatus').textContent = `Relax… ${Math.max(0,(this.phaseEnd-t)/1000).toFixed(1)} s`;
+      if (t >= this.phaseEnd) this.finishRecord(false);
+    } else {
+      const g = GESTURES.find(x=>x.id===this.recWhat);
+      let raw, dir, lift;
+      if (g.geo && this.nStats) { // cheek: watch ALL face stats — how far has the whole face moved from the neutral pose?
+        const x = featVec(); this.lastFeat = x; raw = zLift(this.nStats, x); dir = raw; lift = raw;
+      } else {
+        raw = rawScore(g, Face.bs);
+        // direction-agnostic: some composite signals fall instead of rise for a gesture; we learn the sign
+        dir = raw - (this.neutral[g.id] || 0); lift = Math.abs(dir);
+      }
+      this.lastLift = lift;
+      if (lift > this.peak) { this.peak = lift; this.peakSign = dir < 0 ? -1 : 1; }
+      if (this.holdSince !== null && this.peakSign && Math.sign(dir) !== this.peakSign) this.holdSince = null; // flipped direction: not a plateau
+      this.samples.push(raw);
+      const elapsed = (t - this.recStart)/1000;
+      // "holding" = clearly above neutral AND within 65 % of the best we've seen (stable plateau)
+      const holding = lift >= this.MIN_RANGE && lift >= this.peak*.65;
+      if (holding) { if (this.holdSince===null) { this.holdSince = t; this.holdSamples=[]; this.holdFeats=[]; } this.holdSamples.push(raw); if (this.lastFeat) this.holdFeats.push(this.lastFeat); }
+      else this.holdSince = null;
+      const held = this.holdSince===null ? 0 : (t - this.holdSince)/1000;
+      $('calBar').style.width = ''; // step bar unchanged; use meter as hold bar below
+      if (held >= this.HOLD_NEEDED) { this.finishRecord(true); }
+      else if (elapsed > this.MAX_WAIT) { this.finishRecord(this.peak >= this.MIN_RANGE); }
+      else { $('calStatus').className = holding ? 'status ok' : 'status warn';
+        $('calStatus').textContent = this.peak < this.MIN_RANGE ? `Waiting for the movement… (${Math.round(this.MAX_WAIT-elapsed)} s)` : holding ? `Hold it… ${held.toFixed(1)} / ${this.HOLD_NEEDED} s` : 'Keep holding the expression'; }
+    }
+    const gid = GESTURES.find(g=>g.id===s) ? s : this.recWhat && this.recWhat!=='neutral' ? this.recWhat : null;
+    const fill = $('calMeter').querySelector('.fill');
+    if (gid && this.recWhat===gid && this.holdSince!==null) fill.style.width = Math.min(100, (now()-this.holdSince)/1000/this.HOLD_NEEDED*100)+'%';
+    else if (gid && this.recWhat===gid && GESTURES.find(g=>g.id===gid).geo && this.nStats) fill.style.width = clamp((this.lastLift||0)/.4, 0, 1)*100+'%';
+    else fill.style.width = (gid ? clamp((rawScore(GESTURES.find(g=>g.id===gid), Face.bs) - (this.neutral[gid]||0)) / .4, 0, 1)*100 : 0)+'%';
+  },
+  finishRecord(confident) {
+    const w = this.recWhat; this.recWhat = null;
+    if (w==='neutral') { for (const g of GESTURES) { const vals = this.samples.map(s=>s[g.id]); this.neutral[g.id] = vals.reduce((a,b)=>a+b,0)/Math.max(1,vals.length); }
+      this.nStats = this.neutralFeats.length >= 10 ? featStats(this.neutralFeats) : null; }
+    else if (GESTURES.find(g=>g.id===w).geo && this.nStats) { // cheek: build the learned model from neutral vs. held-pose face stats
+      const rows = this.holdFeats.length >= 10 ? this.holdFeats : null;
+      if (!confident || !rows) { $('calStatus').className='status bad'; $('calStatus').textContent = "We couldn't see that movement clearly. Try again with more light, or press Accept as is."; return; }
+      this.cheekModel = buildModel(this.neutralFeats, rows); this.neutral[w] = 0; this.max[w] = 1; this.sign[w] = 1;
+      const sep = zLift(this.nStats, featStats(rows).m);
+      Audio.success(); $('calStatus').className='status ok'; $('calStatus').textContent = `Got it ✓ — learned your puff from ${rows.length} samples (separation ${sep.toFixed(2)})`;
+    }
+    else {
+      const src = this.holdSamples.length >= 10 ? this.holdSamples : this.samples;
+      const sign = this.peakSign || 1, n = this.neutral[w] || 0;
+      const v = src.slice().sort((a,b)=>a-b); const p = sign > 0 ? (v[Math.floor(v.length*.8)] ?? n) : (v[Math.floor(v.length*.2)] ?? n); const range = (p - n) * sign;
+      if (!confident) { $('calStatus').className='status bad'; $('calStatus').textContent = "We couldn't see that movement clearly. Try again with more light, or press Accept as is."; this.sign[w] = sign; this.max[w] = n + sign*Math.max(range, this.MIN_RANGE); return; }
+      this.max[w] = p; this.sign[w] = sign; Audio.success(); $('calStatus').className='status ok';
+      $('calStatus').textContent = (range < .15 ? "Got it — a small movement, and that's fine, we'll make it count. ✓" : `Got it ✓ (range ${range.toFixed(2)})`) + (sign < 0 ? ' (signal runs inverted on your face — corrected)' : '');
+    }
+    if (this.returnTo!==undefined) { this.step = this.returnTo; this.returnTo = undefined; }
+    else this.step++;
+    setTimeout(()=>this.render(), w==='neutral' ? 300 : 1300);
+  },
+  accept() { // user override when a gesture can't be detected confidently
+    const w = this.cur(); if (!GESTURES.find(g=>g.id===w)) return;
+    this.recWhat = null; if (this.max[w]===undefined) { this.max[w] = (this.neutral[w]||0) + this.MIN_RANGE; this.sign[w] = 1; }
+    if (this.returnTo!==undefined) { this.step = this.returnTo; this.returnTo = undefined; } else this.step++;
+    this.render();
+  },
+  save() { calibration = { neutral:this.neutral, max:this.max, sign:this.sign, cheekModel:this.cheekModel || calibration?.cheekModel || null, date:new Date().toISOString().slice(0,10) }; Store.set('calibration.v1', calibration); this.active=false; UI.show('s-title'); },
+  key(code) { if (code==='Enter' && !this.recWhat && ['camera','test'].includes(this.cur())) { this.step++; this.render(); } },
+};
+$('calButtons').addEventListener('click', e => {
+  const b = e.target.closest('[data-cal]'); if (!b) return; const a = b.dataset.cal;
+  if (a==='next') { Cal.step++; Cal.render(); }
+  else if (a==='skip') { Cal.active=false; UI.show('s-title'); }
+  else if (a==='redo') { Cal.recWhat=null; Cal.render(); }
+  else if (a==='accept') Cal.accept();
+  else if (a.startsWith('redo-')) { const gid = a.slice(5); Cal.returnTo = Cal.step; Cal.step = Cal.steps().indexOf(gid); Cal.render(); }
+});
+
+/* =====================================================================
+   10. MAIN LOOP + BOOT
+   ===================================================================== */
+let last = now(), acc = 0; const STEP = 1/60;
+function frame() {
+  requestAnimationFrame(frame);
+  const t = now(); let dt = Math.min(.1, (t-last)/1000); last = t;
+  Input.update(t);
+  if (game.mode==='play') { acc += dt; while (acc >= STEP && game.mode==='play') { updateGame(STEP, t); acc -= STEP; } }
+  else if (game.mode==='rest') { const left = Math.ceil((restUntil-t)/1000); $('restCount').textContent = left; if (left <= 0) { game.mode='play'; UI.show(null); } }
+  else if (game.mode==='paused') { if (Input.fires.includes('pause')) resumeGame(); }
+  else if (game.mode==='over' || game.mode==='title' || Cal.active) UI.faceMenu(detector.events);
+  if (game.mode==='play' && Face.ready && !settings.keyboardOnly && !Face.faceFound && t - Face.lastSeen > 1500 && game.runT > 2) pauseGame("Can't see your face", 'Move back into the frame, then open your mouth wide or press Space.');
+  if (Cal.active) Cal.tick(t);
+  render(dt, t); UI.updateHud(); UI.updateDebug();
+}
+async function boot() {
+  UI.show('s-title'); UI.buildHud(); document.body.classList.toggle('reduce-motion', settings.reduceMotion);
+  if (settings.keyboardOnly) { $('camStatus').textContent = 'Keyboard mode (face control off in Settings)'; $('camStatus').className='status warn'; return; }
+  $('camStatus').textContent = 'Starting camera and loading face tracking…'; $('camStatus').className='status';
+  try {
+    await Face.start();
+    $('camStatus').textContent = calibration ? `Face tracking ready · calibrated ${calibration.date}` : 'Face tracking ready · run Calibrate first for best results';
+    $('camStatus').className = 'status ok'; UI.show('s-title');
+    if (!calibration) setTimeout(()=>{ if (UI.current==='s-title') Cal.start(); }, 800);
+  } catch (e) {
+    console.error(e); $('errText').textContent = e.message; UI.show('s-error');
+  }
+}
+if (!window.isSecureContext) { $('camStatus').textContent = 'Camera needs https:// or http://localhost — open this file through a local server (e.g. npx serve .)'; $('camStatus').className='status bad'; }
+window.FP = { game, Input, Face, detector, settings: () => settings, calibration: () => calibration, TUTORIAL_STEPS, nextTutorialStep }; // debug handle
+requestAnimationFrame(frame);
+boot();
+</script>
+</body>
+</html>
