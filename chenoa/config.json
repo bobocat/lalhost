@@ -1,0 +1,22 @@
+{
+  "intro": {
+    "title": "Chenoa Forest",
+    "text": "Walk among the pines as they grow around you"
+  },
+  "plants": {
+    "baseName": "flower",
+    "count": 4,
+    "maxPlants": 27,
+    "scale": { "min": 1.0, "max": 2.0 },
+    "scaleAnimation": { "duration": 30000, "easing": "easeOutQuad", "initialScale": 0.15 },
+    "initialSpawnStagger": { "min": 0, "max": 30000 },
+    "immediateSpawnCount": 4,
+    "immediateSpawnInterval": 500,
+    "minSpacing": 2.8,
+    "spawnRadius": { "min": 3.5, "max": 16 },
+    "placementCandidates": 40
+  },
+  "debug": {
+    "showWireframeSphere": false
+  }
+}

@@ -1,0 +1,419 @@
+{
+	"intro" : {
+		"title" : "Whale Child",
+		"story" : "In the deep waters of the Pacific Northwest, a young whale carries the dreams of the ocean. Ancient stories speak of star spirits that guide the whale on its sacred journey. To summon the whale, you must first gather three stars from the earth...",
+		"button" : "Begin Journey"
+	},
+	"soundDialog" : {
+		"text" : "Turn on your sound for the best experience",
+		"button" : "Continue"
+	},
+	"capture" : {
+		"fileNamePrefix" : "whaleboy",
+		"snapshot" : {
+			"fileNamePrefix" : "whale-child"
+		},
+		"video" : {
+			"maxDurationMs" : 30000,
+			"frameRate" : 30,
+			"videoBitsPerSecond" : 3000000,
+			"audioBitsPerSecond" : 128000,
+			"fileNamePrefix" : "whale-child-video"
+		}
+	},
+	"mainGroup" : {
+		"enabled" : true,
+		"baseObject" : {
+			"scale" : 7,
+			"rotateToFaceCamera" : true,
+			"showBoundingBox" : false,
+			"boundingBoxColor" : "#00ff00",
+			"boundingBoxSize" : {
+				"x" : 0.5,
+				"y" : 1.3,
+				"z" : 0.5
+			},
+			"stars" : {
+				"model" : "star.glb",
+				"positions" : [
+					{
+						"x" : -0.25,
+						"y" : -0.54,
+						"z" : 0.04
+					},
+					{
+						"x" : 0,
+						"y" : -0.57,
+						"z" : 0.04
+					},
+					{
+						"x" : 0.25,
+						"y" : -0.57,
+						"z" : 0.04
+					}
+				],
+				"states" : {
+					"off" : {
+						"scale" : 1,
+						"saturation" : 0,
+						"animationPaused" : true
+					},
+					"on" : {
+						"scale" : 1.7,
+						"saturation" : 1,
+						"animationPaused" : false
+					}
+				},
+				"flyingInstance" : {
+					"initialScale" : 1,
+					"finalScale" : 5,
+					"animationDuration" : 1500,
+					"animationEasing" : "easeOutBack",
+					"sinWave" : {
+						"frequency" : 3.5,
+						"height" : 0.05
+					}
+				},
+				"particles" : {
+					"enabled" : true,
+					"count" : 24,
+					"duration" : 600,
+					"color" : "#40a0ff",
+					"gravity" : -1.5,
+					"sizeGrowth" : 3.5,
+					"fadePower" : 2,
+					"radiusSpeed" : {
+						"min" : 0.5,
+						"max" : 2
+					},
+					"liftSpeed" : {
+						"min" : 1.4,
+						"max" : 4
+					},
+					"size" : {
+						"min" : 0.1,
+						"max" : 0.5
+					}
+				},
+				"sparkles" : {
+					"enabled" : true,
+					"emissionInterval" : 100,
+					"count" : 1,
+					"duration" : 2500,
+					"color" : "#ffffff",
+					"opacity" : 0.05,
+					"gravity" : 0,
+					"sizeGrowth" : 3,
+					"fadePower" : 1.7,
+					"radiusSpeed" : {
+						"min" : 0.1,
+						"max" : 0.3
+					},
+					"liftSpeed" : {
+						"min" : 0,
+						"max" : 0
+					},
+					"size" : {
+						"min" : 1.2,
+						"max" : 2.2
+					},
+					"originYOffset" : 0.02
+				}
+			},
+			"speaker" : {
+				"enabled" : false,
+				"icon" : "speaker.png",
+				"position" : {
+					"x" : 0.53,
+					"y" : -0.35,
+					"z" : 0
+				},
+				"scale" : 0.15,
+				"pulseScale" : 1.3,
+				"pulseDuration" : 200,
+				"appearDelay" : 1000,
+				"fadeInDuration" : 500,
+				"fadeOutDuration" : 1000
+			},
+			"scenes" : [
+				{
+					"id" : "object_01",
+					"model" : "object_01.glb",
+					"audio" : "audio/nt_audio.mp3",
+					"audioLength" : 42,
+					"position" : {
+						"x" : 0,
+						"y" : -0.25,
+						"z" : -0.3
+					},
+					"rotation" : {
+						"x" : 0,
+						"y" : 0,
+						"z" : 0
+					},
+					"scale" : 0.7,
+					"animations" : [
+						{
+							"name" : "star",
+							"loop" : true
+						}
+					],
+					"text" : {
+						"content" : "From the earliest days of his life, the whale child's mother taught him the language of the sea through timeless songs that carry the stories and wisdom of life on earth.",
+						"position" : {
+							"x" : 0,
+							"y" : -0.7,
+							"z" : 0
+						},
+						"width" : 0.55,
+						"fontSize" : 0.05,
+						"color" : "#ffffff",
+						"box" : {
+							"enabled" : true,
+							"color" : "#0a1a3a",
+							"opacity" : 0.85,
+							"padding" : 0.04,
+							"radius" : 2,
+							"zOffset" : -0.01
+						}
+					}
+				},
+				{
+					"id" : "uw_scene",
+					"model" : "uw_scene.glb",
+					"audio" : "audio/uw_audio.mp3",
+					"audioLength" : 15,
+					"position" : {
+						"x" : 0,
+						"y" : -0.25,
+						"z" : -0.3
+					},
+					"rotation" : {
+						"x" : 0,
+						"y" : 0,
+						"z" : 0
+					},
+					"scale" : 0.7,
+					"animations" : [
+						{
+							"name" : "swimmers",
+							"loop" : true
+						}
+					],
+					"text" : {
+						"content" : "You have family on land as you do in the sea. We are all connected.....we are all related.",
+						"position" : {
+							"x" : 0,
+							"y" : -0.7,
+							"z" : 0.0
+						},
+						"width" : 0.44,
+						"fontSize" : 0.035,
+						"color" : "#ffffff",
+						"box" : {
+							"enabled" : true,
+							"color" : "#0a1a3a",
+							"opacity" : 0.85,
+							"padding" : 0.04,
+							"radius" : 2,
+							"zOffset" : -0.01
+						}
+					}
+				},
+				{
+					"id" : "dy_scene",
+					"model" : "dy_scene.glb",
+					"audio" : "audio/dy_audio.mp3",
+					"audioLength" : 44,
+					"position" : {
+						"x" : 0,
+						"y" : -0.25,
+						"z" : -0.3
+					},
+					"rotation" : {
+						"x" : 0,
+						"y" : 0,
+						"z" : 0
+					},
+					"scale" : 0.7,
+					"animations" : [
+						{
+							"name" : "dy_main",
+							"loop" : true
+						}
+					],
+					"text" : {
+						"content" : "\"Listen and remember,\" said the whale child's mother. \"The earth's waters are sacred, as all living things must have water to survive.\"",
+						"position" : {
+							"x" : 0,
+							"y" : -0.7,
+							"z" : 0.0
+						},
+						"width" : 0.4,
+						"fontSize" : 0.035,
+						"color" : "#ffffff",
+						"box" : {
+							"enabled" : true,
+							"color" : "#0a1a3a",
+							"opacity" : 0.85,
+							"padding" : 0.04,
+							"radius" : 2,
+							"zOffset" : -0.01
+						}
+					}
+				}
+			]
+		},
+		"sceneSelector" : {
+			"enabled" : true,
+			"menuTransitionDuration" : 1200,
+			"pulseScale" : 1.2,
+			"pulseDuration" : 300,
+			"initialActiveIndex" : 0,
+			"autoExpandFirstScene" : false,
+			"cameraDistance" : 5,
+			"moveAnimationDuration" : 800,
+			"starTapInstruction" : "tap the stars to see the stories",
+			"sceneTextFadeInDuration" : 1000
+		},
+		"pageNavigation" : {
+			"delayBetweenClips" : 500,
+			"tapRegion" : {
+				"top" : 0,
+				"bottom" : 0,
+				"left" : 0,
+				"right" : 0
+			}
+		},
+		"tapperHint" : {
+			"enabled" : true,
+			"image" : "assets/textures/tapper.gif",
+			"initialDelayMs" : 5000,
+			"repeatDelayMs" : 10000,
+			"maxShows" : 3,
+			"scale" : 0.7
+		},
+		"tapSequence" : {
+			"enabled" : true,
+			"tapSound" : "audio/splash.mp3",
+			"texts" : {
+				"tap3" : "Tap the circles to collect the stars",
+				"tap2" : "2 stars remaining",
+				"tap1" : "1 star remaining",
+				"complete" : "starting..."
+			},
+			"rippleTargets" : {
+				"enabled" : true,
+				"count" : 3,
+				"spawnRadius" : 3.5,
+				"minDistance" : 7,
+				"height" : 0.07000000000000001,
+				"size" : 3,
+				"color" : "#2886e3",
+				"opacity" : 0.8,
+				"pulseSpeed" : 3
+			}
+		}
+	},
+	"materialAnimations" : {
+		"uw_background" : {
+			"map" : "emissiveMap",
+			"uSpeed" : 0.05,
+			"vSpeed" : -0.05
+		}
+	},
+	"shaders" : {
+		"water" : {
+			"enabled" : true,
+			"uniforms" : {
+				"waterScale" : {
+					"x" : 1,
+					"y" : 1
+				},
+				"waterSpeed" : {
+					"x" : 0,
+					"y" : 0.02
+				},
+				"waterColor" : "#343f59",
+				"waterAmt" : 0.35,
+				"displacementSpeed" : {
+					"x" : 0,
+					"y" : 0.01
+				},
+				"displacementScale" : {
+					"x" : 1,
+					"y" : 1
+				},
+				"displacementHeight" : 0.15,
+				"specularScale" : 4,
+				"specularBrightness" : 1.5,
+				"specularPop" : 1.2,
+				"specularMax" : 0.75,
+				"specularSpeed" : {
+					"x" : 0,
+					"y" : 0.01
+				}
+			},
+			"textures" : {
+				"waterImage" : "assets/textures/water.jpg",
+				"displacement" : "assets/textures/displacement.jpg",
+				"specularMap" : "assets/textures/waves-blue.jpg"
+			}
+		},
+		"dy_water" : {
+			"cloneOf" : "water",
+			"targetMaterial" : "dy_water",
+			"enabled" : true,
+			"uniforms" : {
+				"waterScale" : {
+					"x" : 1,
+					"y" : 1
+				},
+				"waterSpeed" : {
+					"x" : 0,
+					"y" : 0
+				},
+				"waterColor" : "#ffffff",
+				"waterAmt" : 0.35,
+				"displacementSpeed" : {
+					"x" : 0.004,
+					"y" : 0.007
+				},
+				"displacementScale" : {
+					"x" : 0.5,
+					"y" : 0.5
+				},
+				"displacementHeight" : 0.05,
+				"specularScale" : 0.1,
+				"specularBrightness" : 0.3,
+				"specularPop" : 1.2,
+				"specularMax" : 0.5,
+				"specularSpeed" : {
+					"x" : 0,
+					"y" : 0.01
+				}
+			},
+			"textures" : {
+				"waterImage" : "assets/textures/water1.png",
+				"displacement" : "assets/textures/waves.jpg",
+				"specularMap" : "assets/textures/none.jpg"
+			}
+		},
+		"uw_beams_replace" : {
+			"enabled" : true,
+			"uniforms" : {
+				"texture1Speed" : {
+					"x" : 0.06,
+					"y" : 0
+				},
+				"brightness" : 1,
+				"tintColor" : "#ffffff"
+			},
+			"textures" : {
+				"texture1" : "assets/textures/beams-mask.jpg",
+				"texture2" : "assets/textures/beams-vertical.jpg"
+			}
+		}
+	},
+	"objects" : [ "object_01.glb" ]
+}

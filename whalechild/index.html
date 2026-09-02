@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Whale Child</title><script crossorigin="anonymous" src="./external/scripts/8frame-1.5.0.min.js"></script><script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.6.0/dist/aframe-extras.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script><script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script><script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" crossorigin="anonymous" async="true" data-preload-chunks="slam"></script></head><body><script src="bundle.js"></script><div id="intro-screen" class="overlay fullscreen"><div class="overlay-content"><img class="intro-eye" src="assets/textures/eye-with-border.png" alt="Whale eye"><h1>Whale Child</h1><p class="story">In the deep waters of the Pacific Northwest, a young whale carries the dreams of the ocean. Ancient stories speak of star spirits that guide the whale on its sacred journey. To summon the whale, you must first gather three stars from the earth...</p><button id="start-btn" class="start-btn">Begin Journey</button></div></div><div id="sound-dialog" class="overlay fullscreen hidden"><div class="overlay-content sound-dialog-content"><img class="sound-speaker" src="assets/textures/speaker-up.png" alt="Speaker"><p id="sound-dialog-text">turn on your sound for the best experience</p><button id="sound-continue-btn" class="start-btn">Continue</button></div></div><button id="reset-btn" class="reset-btn hidden">Reset</button><div id="tap-instruction" class="overlay tap-instruction hidden"><p id="tap-instruction-text">tap the ground 3 times to start</p></div><img id="tapper-hint" class="tapper-hint hidden" alt="Tap to continue"><a-scene tap-place three-tap-start occluder-material shader-registry landing-page xrextras-loading xrextras-runtime-error renderer="colorManagement:true" xrweb="
+    allowedDevices: any;
+    defaultEnvironmentFogIntensity: 0.5;
+    defaultEnvironmentFloorTexture: #groundTex;
+    defaultEnvironmentFloorColor: #FFF;
+    defaultEnvironmentSkyBottomColor: #B4C4CC;
+    defaultEnvironmentSkyTopColor: #5ac8fa;
+    defaultEnvironmentSkyGradientStrength: 0.5;"><a-assets><img id="groundTex" src="assets/ground.jpg"> <img id="speakerIcon" src="assets/speaker.png"><audio id="audio-scene-0" src="assets/audio/nt_audio.mp3" preload="auto"></audio><audio id="audio-scene-1" src="assets/audio/uw_audio.mp3" preload="auto"></audio><audio id="audio-scene-2" src="assets/audio/dy_audio.mp3" preload="auto"></audio><audio id="tap-sound" src="assets/audio/splash.mp3" preload="auto"></audio></a-assets><a-camera id="camera" position="0 8 8" raycaster="objects: .cantap, .clickable-star, .clickable-speaker, .ripple-target" cursor="fuse: false; rayOrigin: mouse;"></a-camera><a-entity light="
+      type: directional;
+      intensity: 0.8;
+      castShadow: true;
+      shadowMapHeight: 2048;
+      shadowMapWidth: 2048;
+      shadowCameraTop: 40;
+      shadowCameraBottom: -40;
+      shadowCameraRight: 40;
+      shadowCameraLeft: -40;
+      target: #camera" xrextras-attach="target: camera; offset: 8 15 4" position="1 4.3 2.5" shadow></a-entity><a-light type="ambient" intensity="0.5"></a-light><a-box id="ground" class="cantap" scale="1000 2 1000" position="0 -0.99 0" material="shader: shadow; transparent: true; opacity: 0.4" shadow></a-box></a-scene></body></html>
