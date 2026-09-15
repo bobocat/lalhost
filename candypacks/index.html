@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Candy Packs Puzzle & Spin - Win Prizes!</title>
+  <meta name="description" content="Solve the Candy Packs puzzle and spin the wheel to win a free donut at Lee's Donuts!">
+  
+  <!-- Playful and modern typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Sparkle particles container -->
+  <div id="bg-particles"></div>
+
+  <!-- Mobile phone wrapper -->
+  <div class="phone-container">
+    
+    <!-- ========================================== -->
+    <!-- SCREEN 1: PUZZLE GRID                      -->
+    <!-- ========================================== -->
+    <div id="screen-puzzle" class="screen-view active">
+      <header class="app-header">
+        <div class="logo-container">
+          <h1 class="logo-title">
+            <span class="candy-glow">CANDY</span>
+            <span class="candy-glow">PACKS</span>
+            <span class="presents-text">PRESENTS!</span>
+          </h1>
+        </div>
+        <div class="promo-badge">
+          <span class="promo-text">SOLVE THE PUZZLE FOR <span class="highlight-green">FREE STUFF</span></span>
+        </div>
+      </header>
+
+      <main class="game-area">
+        <!-- 3x3 Puzzle Grid -->
+        <div class="grid-wrapper">
+          <div id="puzzle-grid" class="puzzle-grid" aria-label="Puzzle board">
+            <!-- Dynamically populated by app.js -->
+          </div>
+        </div>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+          <div class="stat-card">
+            <span class="stat-label">TIME</span>
+            <span id="timer-val" class="stat-value">00:00</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">MOVES</span>
+            <span id="moves-val" class="stat-value">0</span>
+          </div>
+        </div>
+
+        <!-- Button Controls -->
+        <div class="control-panel">
+          <button id="preview-btn" class="game-btn btn-secondary" aria-label="Preview full image">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+            </svg>
+            Preview
+          </button>
+          <button id="reset-btn" class="game-btn btn-primary" aria-label="Reset and shuffle puzzle">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+            Shuffle
+          </button>
+          <button id="sound-btn-puzzle" class="game-btn btn-icon-only sound-toggle-btn" aria-label="Toggle sound">
+            <svg class="btn-icon sound-icon-path" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+            </svg>
+          </button>
+        </div>
+      </main>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 2: SPIN WHEEL                       -->
+    <!-- ========================================== -->
+    <div id="screen-spinner" class="screen-view hidden">
+      <header class="app-header">
+        <h2 class="spin-title-text">
+          <span class="yellow-glow">SPIN</span>
+          <span class="for-your-text">FOR YOUR</span>
+          <span class="green-glow">PRIZE!</span>
+        </h2>
+      </header>
+
+      <main class="spinner-area">
+        <!-- Wheel Spinner Board -->
+        <div class="wheel-outer-wrapper">
+          <!-- Pink gemstone pointer -->
+          <div class="wheel-pointer"></div>
+          
+          <!-- Golden marquee border containing the canvas wheel -->
+          <div class="wheel-marquee-border">
+            <canvas id="wheel-canvas" width="340" height="340"></canvas>
+            
+            <!-- Central SPIN Button -->
+            <button id="spin-action-btn" class="wheel-spin-btn" aria-label="Spin the wheel">
+              <span>SPIN</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="spinner-controls">
+          <button id="sound-btn-spinner" class="game-btn btn-icon-only sound-toggle-btn" aria-label="Toggle sound">
+            <svg class="btn-icon sound-icon-path" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+            </svg>
+          </button>
+        </div>
+      </main>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 3: PRIZE AWARDED TICKET             -->
+    <!-- ========================================== -->
+    <div id="screen-prize" class="screen-view hidden">
+      <header class="app-header">
+        <h2 class="prize-title-text">
+          <span class="yellow-glow">HERE IS</span>
+          <span class="yellow-glow">YOUR PRIZE!</span>
+        </h2>
+        <p class="prize-play-tomorrow">PLAY AGAIN TOMORROW!</p>
+      </header>
+
+      <main class="prize-area">
+        <!-- Ticket Container -->
+        <div class="ticket-card animate-ticket">
+          <!-- Golden marquee light border around the ticket -->
+          <div class="ticket-light-border">
+            <div class="ticket-inner">
+              <div class="ticket-content">
+                <h3 class="ticket-header-text">FREE DONUT</h3>
+                <p class="ticket-sub-text">with any purchase</p>
+                <p class="ticket-location">at <span class="highlight-pink">Lee's Donuts</span></p>
+                
+                <!-- Donut graphic container -->
+                <div class="ticket-donut-container">
+                  <img src="donut.jpg" alt="Free Donut Prize" class="ticket-donut-img">
+                </div>
+
+                <!-- Purple Expiration Badge -->
+                <div class="expiry-badge">
+                  <svg class="clock-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+                  </svg>
+                  <span>EXPIRES IN 24 HRS</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="prize-actions">
+          <button id="claim-coupon-btn" class="claim-btn pulsing-btn">
+            🎉 Claim Coupon code!
+          </button>
+          <button id="restart-game-btn" class="game-btn btn-secondary">
+            Play Again
+          </button>
+        </div>
+      </main>
+    </div>
+
+    <!-- Decorative Footer: matching candy arrangement -->
+    <footer class="app-footer">
+      <div class="candy-dust-bed">
+        <img src="candy_footer.jpg" alt="Candy Packs decorations" class="footer-candy-img">
+      </div>
+    </footer>
+  </div>
+
+  <!-- Win Modal Overlay (Puzzle solved -> Go to Wheel) -->
+  <div id="win-modal" class="modal-overlay hidden">
+    <div class="modal-content win-card animate-win">
+      <div class="win-crown">👑</div>
+      <h2 class="win-title">YOU SOLVED IT!</h2>
+      <p class="win-subtitle">Outstanding puzzle-solving skills!</p>
+      
+      <div class="win-stats">
+        <div class="win-stat-item">
+          <span class="win-stat-label">Moves</span>
+          <span id="win-moves" class="win-stat-val">0</span>
+        </div>
+        <div class="win-stat-item">
+          <span class="win-stat-label">Time</span>
+          <span id="win-time" class="win-stat-val">00:00</span>
+        </div>
+      </div>
+
+      <button id="go-to-wheel-btn" class="claim-btn pulsing-btn">
+        🎁 Spin for a Prize!
+      </button>
+      <button id="puzzle-play-again-btn" class="modal-close-btn">Shuffle & Play Again</button>
+    </div>
+  </div>
+
+  <!-- Preview Modal Overlay -->
+  <div id="preview-modal" class="modal-overlay hidden">
+    <div class="modal-content preview-card">
+      <div class="modal-header">
+        <h3>Solve Target</h3>
+        <button id="close-preview-btn" class="close-icon-btn">&times;</button>
+      </div>
+      <div class="preview-img-container">
+        <img src="puzzle_source.jpg" alt="Solved target storefront" class="solved-preview-img">
+      </div>
+    </div>
+  </div>
+
+  <!-- Script File -->
+  <script src="app.js"></script>
+</body>
+</html>
