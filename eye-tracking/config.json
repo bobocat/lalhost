@@ -1,0 +1,27 @@
+{
+  "screen": {
+    "diagonalInches": 15.6
+  },
+  "camera": {
+    "width": 640,
+    "height": 480,
+    "position": "top-centre",
+    "customCm": { "x": 0, "y": 12, "z": 0 }
+  },
+  "ipdMm": 63,
+  "scene": {
+    "glb": "assets/scene.glb",
+    "aimAtViewer": true
+  },
+  "filter": {
+    "minCutoff": 1.0,
+    "beta": 0.02,
+    "dCutoff": 1.0,
+    "extrapolateMs": 50
+  },
+  "parallaxGain": 1.0,
+  "preview": {
+    "show": true,
+    "width": 220
+  }
+}
