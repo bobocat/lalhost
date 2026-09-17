@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Window View</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  :root{
+    --bg:#05070c; --panel:#12161f; --panel2:#1b212d; --line:#2a3340;
+    --ink:#e8edf6; --dim:#93a0b7; --accent:#7dc4ff; --good:#7dffb3; --bad:#ff6b8b; --warn:#ffca6b;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.5 system-ui,"Segoe UI",Roboto,sans-serif;overflow:hidden;cursor:default}
+  #view{position:fixed;inset:0;width:100%;height:100%;display:block;background:#05070c}
+  #video{position:fixed;left:-9999px;top:0;width:320px}
+
+  /* ---- overlay screens ---- */
+  #ui{position:fixed;inset:0;display:grid;place-items:center;padding:24px;
+      background:radial-gradient(120% 120% at 50% 0%,rgba(8,11,18,.72),rgba(3,5,9,.94));
+      overflow:auto;z-index:20}
+  #ui.hidden,.hidden{display:none !important}
+  .screen{width:min(760px,100%)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+        padding:26px 28px;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+  h1{margin:0 0 4px;font-size:26px;letter-spacing:.2px}
+  h2{margin:0 0 10px;font-size:19px}
+  p{margin:10px 0;color:var(--dim)}
+  p.lead{color:var(--ink)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px}
+  .grid{display:grid;grid-template-columns:190px 1fr;gap:10px 14px;align-items:center;margin-top:14px}
+  label{color:var(--dim)}
+  input,select,button{font:inherit;color:var(--ink);background:var(--panel2);
+        border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+  input[type=range]{padding:0;background:none;border:none;width:100%}
+  input[type=number]{width:120px}
+  button{cursor:pointer;transition:background .12s,border-color .12s}
+  button:hover{background:#252e3d;border-color:#3a4658}
+  button.primary{background:var(--accent);color:#04121e;border-color:var(--accent);font-weight:600}
+  button.primary:hover{background:#a2d6ff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .steps{display:flex;gap:8px;margin-bottom:18px;font-size:13px;color:var(--dim)}
+  .steps span{padding:4px 10px;border-radius:99px;border:1px solid var(--line)}
+  .steps span.on{color:var(--ink);border-color:var(--accent);background:rgba(125,196,255,.12)}
+  .kbd{font:12px var(--mono);background:var(--panel2);border:1px solid var(--line);
+       border-radius:5px;padding:1px 6px;color:var(--ink)}
+  .mono{font-family:var(--mono)}
+  .note{font-size:13px;color:var(--dim)}
+  .bad{color:var(--bad)} .good{color:var(--good)} .warn{color:var(--warn)}
+  #cfgStatus{margin-top:14px;font-size:13px;color:var(--warn)}
+  .bigread{font:600 26px/1.3 var(--mono);margin:14px 0}
+  .keys{margin-top:18px;font-size:13px;color:var(--dim);display:grid;
+        grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 16px}
+
+  /* ---- viewer chrome ---- */
+  #hud{position:fixed;left:14px;bottom:12px;z-index:15;font:12px var(--mono);color:var(--dim);
+       background:rgba(8,11,18,.55);border:1px solid var(--line);border-radius:8px;padding:7px 10px;
+       pointer-events:none;backdrop-filter:blur(4px)}
+  #preview{position:fixed;right:14px;bottom:14px;z-index:15;border-radius:10px;
+       border:2px solid var(--line);background:#000;transform:scaleX(-1)}
+  #debug{position:fixed;left:14px;top:14px;z-index:16;font:12px/1.45 var(--mono);
+       color:var(--ink);background:rgba(8,11,18,.82);border:1px solid var(--line);
+       border-radius:10px;padding:10px 12px;max-width:min(580px,60vw);white-space:pre-wrap}
+  #debug b{color:var(--accent);font-weight:600}
+  #lost{position:fixed;inset:0;z-index:14;display:grid;place-items:center;pointer-events:none;
+       background:rgba(5,7,12,.35);color:var(--ink);font-size:17px;letter-spacing:.3px}
+  #lost div{background:rgba(8,11,18,.8);border:1px solid var(--line);border-radius:12px;padding:14px 22px}
+  #toast{position:fixed;left:50%;top:22px;transform:translateX(-50%);z-index:30;
+       background:rgba(8,11,18,.9);border:1px solid var(--line);border-radius:8px;
+       padding:8px 14px;font-size:13px;opacity:0;transition:opacity .18s;pointer-events:none}
+  #toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<canvas id="view"></canvas>
+<video id="video" playsinline muted autoplay></video>
+
+<div id="lost" class="hidden"><div>Looking for your face…</div></div>
+<canvas id="preview" class="hidden" width="220" height="165"></canvas>
+<div id="hud" class="hidden"></div>
+<div id="debug" class="hidden"></div>
+<div id="toast"></div>
+
+<div id="ui">
+
+  <!-- ---------------------------------------------------------------- title -->
+  <section id="s-title" class="screen">
+    <div class="card">
+      <h1>Window View</h1>
+      <p class="lead">Your webcam follows your head; the monitor becomes a window onto the scene behind it.
+        Sit about 50 cm away in even light, and look at the screen — not at the camera.</p>
+      <div class="row">
+        <button class="primary" data-act="start">Start</button>
+        <button data-act="calibrate">Calibrate</button>
+        <button data-act="keyboard">Preview without a camera</button>
+      </div>
+      <p id="calState" class="note"></p>
+      <div id="cfgStatus" hidden></div>
+      <div class="keys">
+        <div><span class="kbd">F</span> fullscreen (needed for correct geometry)</div>
+        <div><span class="kbd">C</span> camera preview</div>
+        <div><span class="kbd">D</span> debug panel</div>
+        <div><span class="kbd">K</span> keyboard / mouse head control</div>
+        <div><span class="kbd">[</span> <span class="kbd">]</span> parallax gain</div>
+        <div><span class="kbd">V</span> anchor plane presets · <span class="kbd">N</span> <span class="kbd">M</span> nearer / deeper</div>
+        <div><span class="kbd">R</span> recalibrate &nbsp; <span class="kbd">Esc</span> back here</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------- calibration -->
+  <section id="s-cal" class="screen hidden">
+    <div class="card">
+      <div class="steps">
+        <span data-step="1">1 · Screen</span><span data-step="2">2 · Distance</span><span data-step="3">3 · Check</span>
+      </div>
+
+      <div id="cal1" class="calstep">
+        <h2>Your screen and camera</h2>
+        <p>Measure the screen diagonally, corner to corner of the lit area, or use the number the
+          laptop was sold with.</p>
+        <div class="grid">
+          <label for="diag">Screen diagonal (inches)</label>
+          <div><input id="diag" type="number" step="0.1" min="5" max="90" value="15.6"></div>
+          <label for="campos">Webcam position</label>
+          <select id="campos">
+            <option value="top-centre">Top centre (most laptops)</option>
+            <option value="top-left">Top left</option>
+            <option value="top-right">Top right</option>
+            <option value="custom">Custom (cm from screen centre)</option>
+          </select>
+          <label for="camx" id="customLabel">Camera x, y (cm)</label>
+          <div id="customRow">
+            <input id="camx" type="number" step="0.5" value="0" style="width:90px">
+            <input id="camy" type="number" step="0.5" value="12" style="width:90px">
+          </div>
+        </div>
+        <p id="screenInfo" class="note"></p>
+        <div class="row"><button class="primary" data-act="cal-next1">Next</button>
+          <button data-act="cal-cancel">Cancel</button></div>
+      </div>
+
+      <div id="cal2" class="calstep hidden">
+        <h2>How far away you sit</h2>
+        <p>Sit the way you normally would, look at the screen, and hold still. Then press
+          <span class="kbd">Space</span> — one second of samples sets the scale of everything else.</p>
+        <div class="grid">
+          <label for="dist">I am sitting about (cm)</label>
+          <div><input id="dist" type="number" step="1" min="25" max="150" value="50"></div>
+          <label for="ipd">My eye spacing (mm)</label>
+          <div><input id="ipd" type="number" step="0.5" min="45" max="80" value="63">
+            <span class="note">63 is the adult average</span></div>
+        </div>
+        <div class="bigread" id="cal2read">waiting for a face…</div>
+        <div class="row"><button class="primary" data-act="cal-capture">Capture (Space)</button>
+          <button data-act="cal-back2">Back</button>
+          <button data-act="cal-cancel">Cancel</button></div>
+      </div>
+
+      <div id="cal3" class="calstep hidden">
+        <h2>Check it</h2>
+        <p>Move your head left and right. The reading should follow you in centimetres, and the
+          room behind the glass should shift as if you were leaning past a window frame. Sitting
+          still, you should be looking into the middle of the room: it is tilted to face wherever
+          you were when you pressed Space.</p>
+        <div class="bigread" id="cal3read">—</div>
+        <div class="grid">
+          <label for="gain">Parallax gain <span id="gainVal" class="mono">1.00</span></label>
+          <input id="gain" type="range" min="0.5" max="2" step="0.05" value="1">
+        </div>
+        <p class="note">1.00 is geometrically correct. Raise it for a stronger effect on a small screen.</p>
+        <div class="row"><button class="primary" data-act="cal-save">Save and start</button>
+          <button data-act="cal-back3">Back</button>
+          <button data-act="cal-cancel">Cancel</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------------- error -->
+  <section id="s-error" class="screen hidden">
+    <div class="card">
+      <h2 class="bad">Head tracking unavailable</h2>
+      <p id="errText"></p>
+      <div class="row">
+        <button class="primary" data-act="retry">Try again</button>
+        <button data-act="keyboard">Preview without a camera</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

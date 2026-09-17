@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Head Dodge</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  :root{
+    --bg:#05070c; --panel:#12161f; --panel2:#1b212d; --line:#2a3340;
+    --ink:#e8edf6; --dim:#93a0b7; --accent:#7dc4ff; --good:#7dffb3; --bad:#ff6b8b; --warn:#ffca6b;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.5 system-ui,"Segoe UI",Roboto,sans-serif;overflow:hidden;cursor:default}
+  #view{position:fixed;inset:0;width:100%;height:100%;display:block;background:#05070c}
+  #video{position:fixed;left:-9999px;top:0;width:320px}
+  #ui{position:fixed;inset:0;display:grid;place-items:center;padding:24px;
+      background:radial-gradient(120% 120% at 50% 0%,rgba(8,11,18,.72),rgba(3,5,9,.94));overflow:auto;z-index:20}
+  #ui.hidden,.hidden{display:none !important}
+  .screen{width:min(720px,100%)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px 28px;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+  h1{margin:0 0 4px;font-size:28px} h2{margin:0 0 10px;font-size:19px}
+  p{margin:10px 0;color:var(--dim)} p.lead{color:var(--ink)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px}
+  button{font:inherit;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
+  button:hover{background:#252e3d} button.primary{background:var(--accent);color:#04121e;border-color:var(--accent);font-weight:600}
+  .kbd{font:12px var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--ink)}
+  .note{font-size:13px;color:var(--dim)} .bad{color:var(--bad)} .good{color:var(--good)} .warn{color:var(--warn)}
+  .mono{font-family:var(--mono)}
+  .keys{margin-top:16px;font-size:13px;color:var(--dim);display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 16px}
+  .bars{display:grid;grid-template-columns:110px 1fr 60px;gap:8px 12px;align-items:center;margin-top:14px;font-size:13px}
+  .bar{height:12px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;position:relative;overflow:hidden}
+  .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);width:0;transition:width .05s}
+  .bar b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--warn)}
+  .bar.on i{background:var(--good)}
+  .big{font:700 44px/1.1 var(--mono);margin:8px 0}
+  #hud{position:fixed;left:14px;top:14px;z-index:15;font:14px var(--mono);color:var(--ink);
+       background:rgba(8,11,18,.55);border:1px solid var(--line);border-radius:8px;padding:8px 12px;pointer-events:none;backdrop-filter:blur(4px)}
+  #hud .score{font-size:24px;font-weight:700}
+  #hint{position:fixed;left:14px;bottom:12px;z-index:15;font:12px var(--mono);color:var(--dim);
+       background:rgba(8,11,18,.55);border:1px solid var(--line);border-radius:8px;padding:6px 10px;pointer-events:none}
+  #preview{position:fixed;right:14px;bottom:14px;z-index:15;border-radius:10px;border:2px solid var(--line);background:#000;transform:scaleX(-1)}
+  #debug{position:fixed;right:14px;top:14px;z-index:16;font:12px/1.45 var(--mono);color:var(--ink);background:rgba(8,11,18,.82);
+       border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-width:min(560px,60vw);white-space:pre-wrap}
+  #debug b{color:var(--accent)}
+  #lost{position:fixed;inset:0;z-index:14;display:grid;place-items:center;pointer-events:none;background:rgba(5,7,12,.35);font-size:17px}
+  #lost div{background:rgba(8,11,18,.8);border:1px solid var(--line);border-radius:12px;padding:14px 22px}
+  #flash{position:fixed;inset:0;z-index:13;pointer-events:none;box-shadow:inset 0 0 0 0 rgba(255,80,110,0);transition:box-shadow .15s}
+  #flash.hit{box-shadow:inset 0 0 120px 30px rgba(255,80,110,.75);transition:none}
+  #toast{position:fixed;left:50%;top:22px;transform:translateX(-50%);z-index:30;background:rgba(8,11,18,.9);border:1px solid var(--line);
+       border-radius:8px;padding:8px 14px;font-size:13px;opacity:0;transition:opacity .18s;pointer-events:none}
+  #toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<canvas id="view"></canvas>
+<video id="video" playsinline muted autoplay></video>
+<div id="flash"></div>
+<div id="lost" class="hidden"><div>Looking for your face… (paused)</div></div>
+<canvas id="preview" class="hidden" width="220" height="165"></canvas>
+<div id="hud" class="hidden"></div>
+<div id="hint" class="hidden"></div>
+<div id="debug" class="hidden"></div>
+<div id="toast"></div>
+
+<div id="ui">
+  <section id="s-title" class="screen">
+    <div class="card">
+      <h1>Head Dodge</h1>
+      <p class="lead">Rocks fly out of the room at you. Lean out of their way. Raise your eyebrows to shoot
+        one; it bursts into gems. Open your mouth and the gems fly out of the screen into it.</p>
+      <p id="calState" class="note"></p>
+      <div class="bars">
+        <span>eyebrows</span><div class="bar" id="barBrow"><i></i><b style="left:50%"></b></div><span class="mono" id="valBrow">—</span>
+        <span>mouth</span><div class="bar" id="barMouth"><i></i><b style="left:55%"></b></div><span class="mono" id="valMouth">—</span>
+      </div>
+      <p class="note" id="neutralState">Straight face, then press <b>Capture neutral</b> — 2 seconds. Makes the gestures
+        measure from <em>your</em> resting face.</p>
+      <div class="row">
+        <button class="primary" data-act="play">Play</button>
+        <button data-act="neutral">Capture neutral (2 s)</button>
+        <button data-act="keyboard">Play with keyboard</button>
+      </div>
+      <p class="note" id="best"></p>
+      <div class="keys">
+        <div><span class="kbd">Space</span> shoot (or eyebrows)</div>
+        <div><span class="kbd">M</span> hold: magnet (or open mouth)</div>
+        <div><span class="kbd">F</span> fullscreen</div>
+        <div><span class="kbd">C</span> camera preview &nbsp; <span class="kbd">D</span> debug</div>
+        <div><span class="kbd">K</span> keyboard / mouse instead of the camera</div>
+        <div><span class="kbd">S</span> sound &nbsp; <span class="kbd">Esc</span> menu</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="s-over" class="screen hidden">
+    <div class="card">
+      <h2>Game over</h2>
+      <div class="big" id="overScore">0</div>
+      <p id="overStats" class="note"></p>
+      <div class="row">
+        <button class="primary" data-act="play">Again (Space)</button>
+        <button data-act="menu">Menu</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="s-error" class="screen hidden">
+    <div class="card">
+      <h2 class="bad">Head tracking unavailable</h2>
+      <p id="errText"></p>
+      <div class="row"><button class="primary" data-act="retry">Try again</button>
+        <button data-act="keyboard">Play with keyboard</button></div>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="src/game/main.js"></script>
+</body>
+</html>
